@@ -4,11 +4,11 @@ PomodoroTimer for tab Samsung S9
 
 Work variant on `work/jira-focus`: **Pomodoro Work** installs alongside the personal timer. A cream card above the dial shows the current JIRA. Tap it to enter a full issue key, save it, or clear it. After saving a key, entering just a number reuses that project prefix. The card says RETURN TO during breaks. Editing the key leaves the countdown running; the key is stored locally and survives restarts.
 
-Install `Pomodoro-Work-0.4.apk` for this variant. The personal app has its own independent timer and preferences. See the [original design options](docs/jira-focus-design.md).
+Install `Pomodoro-Work-0.5.apk` for this variant. The personal app has its own independent timer and preferences. See the [original design options](docs/jira-focus-design.md).
 
 ## My Day Ribbon
 
-The cream My Day card shows the current São Paulo time and upcoming meeting starts. On smaller windows tap its summary to expand the full timeline. On wide tablets it appears beside the dial.
+The cream My Day card shows the current São Paulo time and upcoming meeting starts. On smaller windows tap its summary to expand the full timeline. On wide tablets it appears beside the dial. Tap × in My Day to hide the panel and give the dial the available space. Choose ⋮ → Show My Day to restore it. The app remembers this preference and continues delivering meeting reminders while the panel is hidden.
 
 1. Tap each meeting's Edit action. Select its São Paulo start time for the date shown, check the corresponding New York time, and tap Save.
 2. The schedule follows New York local time, automatically converting to São Paulo using the date's time-zone rules. Meeting settings are stored privately on the device.
@@ -21,7 +21,7 @@ A personal, offline Android timer for Arao's Galaxy Tab S9. A physical-style foc
 
 ## Use it on the tablet
 
-1. Copy **Pomodoro-Work-0.4.apk** to the Tab S9 using Quick Share or a USB cable. It upgrades the existing work app.
+1. Copy **Pomodoro-Work-0.5.apk** to the Tab S9 using Quick Share or a USB cable. It upgrades the existing work app.
 2. Open the APK in **My Files**. If Android asks, allow that app to install this APK.
 3. Open **Pomodoro**. Drag the outside of the dial to choose **1–60 minutes**.
 4. Tap **Start** and allow notifications so the bell can play with the screen off.

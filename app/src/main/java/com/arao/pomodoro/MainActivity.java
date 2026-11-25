@@ -46,6 +46,10 @@ public final class MainActivity extends Activity {
     private TextView jiraKey;
     private EditText jiraEditor;
     private MeetingRibbonView ribbon;
+    private ScrollView ribbonScroll;
+    private TextView overflow;
+    private LinearLayout undoBar;
+    private final Runnable dismissUndo = () -> undoBar.setVisibility(View.GONE);
     private MeetingRibbonView expandedRibbon;
     private AlertDialog ribbonDialog;
     private MeetingEditor meetingEditor;
@@ -119,7 +123,24 @@ public final class MainActivity extends Activity {
         TextView title = text("pomodoro", 23, 0xFFF1EDE1);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         title.setLetterSpacing(.035f);
-        root.addView(title);
+        FrameLayout header = new FrameLayout(this);
+        header.addView(title,new FrameLayout.LayoutParams(-2,-2,Gravity.CENTER));
+        overflow = text("⋮",26,0xFFF6F2E7);
+        overflow.setGravity(Gravity.CENTER);
+        overflow.setContentDescription("More options");
+        overflow.setFocusable(true);
+        overflow.setOnClickListener(view -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(this,view,Gravity.END);
+            boolean show = ribbonScroll.getVisibility() != View.VISIBLE;
+            menu.getMenu().add(show ? "Show My Day" : "Hide My Day");
+            menu.setOnMenuItemClickListener(item -> {
+                setRibbonVisible(show);
+                return true;
+            });
+            menu.show();
+        });
+        header.addView(overflow,new FrameLayout.LayoutParams(dp(48),dp(48),Gravity.END | Gravity.CENTER_VERTICAL));
+        root.addView(header,new LinearLayout.LayoutParams(-1,-2));
         TextView subtitle = text("A little space to focus.", 13, 0xFF9FAFA4);
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-2, -2);
         subtitleParams.topMargin = dp(7);
@@ -215,7 +236,7 @@ public final class MainActivity extends Activity {
         timerPanel.addView(controlFrame, new LinearLayout.LayoutParams(-1, -2));
 
         ribbon = new MeetingRibbonView(this, compact, ribbonActions());
-        ScrollView ribbonScroll = new ScrollView(this);
+        ribbonScroll = new ScrollView(this);
         ribbonScroll.setFillViewport(false);
         ribbonScroll.addView(ribbon, new ScrollView.LayoutParams(-1,-2));
         LinearLayout.LayoutParams ribbonParams = wide ? new LinearLayout.LayoutParams(0,-1,1)
@@ -223,6 +244,16 @@ public final class MainActivity extends Activity {
         if (wide) ribbonParams.setMarginStart(dp(16));
         else ribbonParams.topMargin = dp(10);
         body.addView(ribbonScroll,ribbonParams);
+        ribbonScroll.setVisibility(workPreferences.getBoolean("myDayVisible",true) ? View.VISIBLE : View.GONE);
+        undoBar = new LinearLayout(this);
+        undoBar.setGravity(Gravity.CENTER);
+        undoBar.addView(text("My Day hidden",14,0xFFF6F2E7));
+        Button undo = new Button(this,null,android.R.attr.borderlessButtonStyle);
+        undo.setText(R.string.undo);
+        undo.setOnClickListener(view -> setRibbonVisible(true));
+        undoBar.addView(undo);
+        undoBar.setVisibility(View.GONE);
+        root.addView(undoBar);
 
         alerts = text("", 12, 0xFFE9B49A);
         alerts.setPadding(0, dp(12), 0, 0);
@@ -242,7 +273,27 @@ public final class MainActivity extends Activity {
             @Override public void edit(int id) { editMeeting(id,null); }
             @Override public void expand() { showRibbon(); }
             @Override public void settings() { requestMeetingAlerts(); }
+            @Override public void close() { setRibbonVisible(false); }
         };
+    }
+
+    private void setRibbonVisible(boolean show) {
+        if (ribbonDialog != null) ribbonDialog.dismiss();
+        workPreferences.edit().putBoolean("myDayVisible",show).apply();
+        ribbonScroll.setVisibility(show ? View.VISIBLE : View.GONE);
+        handler.removeCallbacks(dismissUndo);
+        undoBar.setVisibility(View.GONE);
+        if (show) {
+            ribbon.render(Instant.now(),MeetingStore.all(this));
+        } else {
+            overflow.requestFocus();
+            if (!workPreferences.getBoolean("myDayUndoShown",false)) {
+                undoBar.setVisibility(View.VISIBLE);
+                undoBar.announceForAccessibility("My Day hidden. Undo available.");
+                workPreferences.edit().putBoolean("myDayUndoShown",true).apply();
+                handler.postDelayed(dismissUndo,8000);
+            }
+        }
     }
 
     private void showRibbon() {
@@ -285,7 +336,7 @@ public final class MainActivity extends Activity {
             lastRibbonMinute = minute;
             meetings = MeetingStore.all(this);
             if (!TimerAlarms.canSchedule(this)) MeetingAlarms.refresh(this);
-            ribbon.render(now,meetings);
+            if (ribbonScroll.getVisibility() == View.VISIBLE) ribbon.render(now,meetings);
             if (expandedRibbon != null) expandedRibbon.render(now,meetings);
         }
         if (meetingPrompt != null) {
@@ -515,6 +566,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        handler.removeCallbacks(dismissUndo);
         if (backgroundFade != null) backgroundFade.cancel();
         super.onDestroy();
     }

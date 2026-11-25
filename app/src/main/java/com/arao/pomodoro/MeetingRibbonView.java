@@ -15,7 +15,7 @@ import java.util.*;
 
 @android.annotation.SuppressLint("ViewConstructor") // Created only in code with required actions.
 final class MeetingRibbonView extends LinearLayout {
-    interface Actions { void edit(int id); void expand(); void settings(); }
+    interface Actions { void edit(int id); void expand(); void settings(); void close(); }
     private final Actions actions;
     private final boolean compact;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -42,8 +42,7 @@ final class MeetingRibbonView extends LinearLayout {
         lastContent = key;
         removeAllViews();
         markers.clear();
-        TextView title = label("My day  ·  São Paulo", 18, INK, true);
-        addView(title);
+        addHeader(now);
         MeetingPlanner.Occurrence next = MeetingPlanner.next(schedules, now);
         if (compact) {
             boolean unconfigured = schedules.stream().anyMatch(m -> !m.configured());
@@ -76,34 +75,34 @@ final class MeetingRibbonView extends LinearLayout {
                 boolean starting = past && Duration.between(event.start(),now).getSeconds() < 60;
                 String status = starting ? "Starts now" : past ? "Started at " + MeetingSchedule.brazilTime(event.start())
                         : MeetingPlanner.until(now,event.start());
-                addRow(MeetingSchedule.brazilTime(event.start()) + "  " + event.meeting().name(),
-                        status, past && !starting ? MUTED : AMBER,event.meeting().id(),gap(previous,event.start()));
+                addRow(event.meeting().name(),status, past && !starting ? MUTED : AMBER,
+                        event.meeting().id(),gap(previous,event.start()),MeetingSchedule.brazilTime(event.start()));
                 if (starting || (!past && Duration.between(now,event.start()).getSeconds() <= event.meeting().lead()*60L))
-                    getChildAt(getChildCount()-1).setBackgroundColor(0xFFFFD997);
+                    getChildAt(getChildCount()-1).setBackground(surface(0xFFFFE4AE,12));
                 previous = event.start();
             }
-            if (!nowShown) addRow("Now  ·  " + MeetingSchedule.brazilTime(now),"",INK,-1,gap(previous,now));
+            if (!nowShown && !today.isEmpty()) addRow("Now  ·  " + MeetingSchedule.brazilTime(now),"",INK,-1,gap(previous,now));
             if (today.isEmpty() || (next != null && !next.start().atZone(MeetingSchedule.SP).toLocalDate()
                     .equals(now.atZone(MeetingSchedule.SP).toLocalDate()))) {
                 if (next != null) {
                     String date = DateTimeFormatter.ofPattern("EEE, MMM d",Locale.US).format(next.start().atZone(MeetingSchedule.SP));
-                    addRow("Next: " + next.meeting().name(),date + " · " + MeetingSchedule.brazilTime(next.start()),
-                            AMBER,next.meeting().id(),dp(8));
-                } else addView(label("No upcoming meetings",14,MUTED,false));
+                    addRow(next.meeting().name(),"Next · " + date,AMBER,next.meeting().id(),dp(8),
+                            MeetingSchedule.brazilTime(next.start()));
+                }
             }
             for (MeetingSchedule meeting : schedules) {
                 boolean visible = today.stream().anyMatch(o -> o.meeting().id() == meeting.id())
                         || (next != null && next.meeting().id() == meeting.id());
                 if (!visible) {
                     Instant future = meeting.next(now,0);
-                    String status = !meeting.configured() ? "Set meeting time" : !meeting.enabled() ? "Disabled"
+                    String status = !meeting.configured() ? "" : !meeting.enabled() ? "Reminders off"
                             : DateTimeFormatter.ofPattern("EEE, MMM d",Locale.US).format(future.atZone(MeetingSchedule.SP));
                     String name = meeting.name();
                     if (meeting.configured()) {
                         Instant display = future != null ? future : meeting.start(now.atZone(MeetingSchedule.NY).toLocalDate());
                         name = MeetingSchedule.brazilTime(display) + "  " + name;
                     }
-                    addRow(name,status,MUTED,meeting.id(),dp(4));
+                    addScheduleTile(meeting,name,status);
                 }
             }
         }
@@ -118,10 +117,61 @@ final class MeetingRibbonView extends LinearLayout {
         }
         invalidate();
     }
+    private void addHeader(Instant now) {
+        LinearLayout header = new LinearLayout(getContext());
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout titles = new LinearLayout(getContext());
+        titles.setOrientation(VERTICAL);
+        titles.addView(label("My Day",22,INK,true));
+        titles.addView(label("São Paulo  ·  " + MeetingSchedule.brazilTime(now),13,0xFF56675E,false));
+        header.addView(titles,new LayoutParams(0,-2,1));
+        TextView close = label("×",24,INK,false);
+        close.setGravity(Gravity.CENTER);
+        close.setContentDescription("Hide My Day");
+        close.setFocusable(true);
+        close.setBackground(surface(0xFFE9E7DC,24));
+        close.setOnClickListener(view -> actions.close());
+        header.addView(close,new LayoutParams(dp(48),dp(48)));
+        addView(header);
+    }
+
+    private android.graphics.drawable.Drawable surface(int color,int radius) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(color);
+        shape.setCornerRadius(dp(radius));
+        return new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x1833483E),shape,null);
+    }
+
+    private void addScheduleTile(MeetingSchedule meeting,String name,String status) {
+        LinearLayout tile = new LinearLayout(getContext());
+        tile.setGravity(Gravity.CENTER_VERTICAL);
+        tile.setMinimumHeight(dp(56));
+        tile.setPadding(dp(14),dp(8),dp(10),dp(8));
+        tile.setBackground(surface(0xFFEDEBE1,12));
+        LinearLayout details = new LinearLayout(getContext());
+        details.setOrientation(VERTICAL);
+        details.addView(label(name,16,INK,true));
+        if (!status.isEmpty()) details.addView(label(status,13,MUTED,false));
+        tile.addView(details,new LayoutParams(0,-2,1));
+        String action = meeting.configured() ? "Edit" : "Set time";
+        TextView actionLabel = label(action,14,0xFF29503E,true);
+        actionLabel.setPadding(dp(8),dp(4),dp(8),dp(4));
+        tile.addView(actionLabel);
+        tile.setFocusable(true);
+        tile.setContentDescription(meeting.name() + ", " + action);
+        tile.setOnClickListener(view -> actions.edit(meeting.id()));
+        LayoutParams layout = new LayoutParams(-1,-2);
+        layout.topMargin = dp(8);
+        addView(tile,layout);
+    }
     private int gap(Instant previous, Instant next) {
         return previous == null ? dp(4) : dp((int)Math.min(24,Math.max(2,Duration.between(previous,next).toMinutes()/4)));
     }
     private void addRow(String name, String status, int color, int id, int gap) {
+        addRow(name,status,color,id,gap,null);
+    }
+    private void addRow(String name, String status, int color, int id, int gap,String time) {
         LinearLayout row = new LinearLayout(getContext());
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(48));
@@ -130,6 +180,14 @@ final class MeetingRibbonView extends LinearLayout {
         dot.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(dot,new LayoutParams(dp(22),-1));
         markers.add(dot);
+        if (time != null) {
+            TextView clock = label(time,17,INK,true);
+            clock.setFontFeatureSettings("tnum");
+            clock.setGravity(Gravity.CENTER);
+            clock.setPadding(dp(8),dp(6),dp(8),dp(6));
+            clock.setBackground(surface(color == AMBER ? 0xFFF4E0BA : 0xFFE5E5DC,8));
+            row.addView(clock);
+        }
         LinearLayout content = new LinearLayout(getContext());
         content.setOrientation(VERTICAL);
         content.setPadding(dp(8),dp(5),dp(4),dp(5));
@@ -140,7 +198,7 @@ final class MeetingRibbonView extends LinearLayout {
             TextView edit = label("Edit",13,INK,true);
             row.addView(edit);
             row.setFocusable(true);
-            row.setContentDescription(name + ", " + status + ", edit meeting");
+            row.setContentDescription(name + ", " + time + ", " + status + ", edit meeting");
             row.setOnClickListener(v -> actions.edit(id));
         }
         LayoutParams params = new LayoutParams(-1,-2);
