@@ -3,6 +3,7 @@ package com.arao.pomodoro;
 import android.Manifest;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -21,6 +22,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -37,6 +39,10 @@ public final class MainActivity extends Activity {
     private Button secondary;
     private TextView instruction;
     private TextView alerts;
+    private TextView jiraLabel;
+    private TextView jiraKey;
+    private EditText jiraEditor;
+    private SharedPreferences workPreferences;
     private boolean startAfterPermission;
     private boolean pendingFocusAgain;
     private SharedPreferences preferences;
@@ -61,6 +67,7 @@ public final class MainActivity extends Activity {
         state = TimerStore.load(this);
         if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
         preferences = getSharedPreferences("timer", MODE_PRIVATE);
+        workPreferences = getSharedPreferences("work", MODE_PRIVATE);
         if (savedInstanceState != null) {
             startAfterPermission = savedInstanceState.getBoolean("startAfterPermission");
             pendingFocusAgain = savedInstanceState.getBoolean("pendingFocusAgain");
@@ -68,6 +75,10 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         buildScreen();
+        if (savedInstanceState != null && savedInstanceState.containsKey("jiraDraft")) {
+            String draft = savedInstanceState.getString("jiraDraft");
+            root.post(() -> editJira(draft));
+        }
     }
 
     private void buildScreen() {
@@ -95,6 +106,33 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-2, -2);
         subtitleParams.topMargin = dp(7);
         root.addView(subtitle, subtitleParams);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(20), dp(12), dp(20), dp(12));
+        GradientDrawable cardBackground = new GradientDrawable();
+        cardBackground.setColor(0xFFF6F2E7);
+        cardBackground.setCornerRadius(dp(18));
+        card.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x2033483E), cardBackground, null));
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setMinimumHeight(dp(80));
+        card.setOnClickListener(view -> editJira(null));
+        jiraLabel = text(getString(R.string.current_jira), 12, 0xFF33483E);
+        jiraLabel.setLetterSpacing(.08f);
+        card.addView(jiraLabel);
+        jiraKey = text("", 28, 0xFF192522);
+        jiraKey.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        jiraKey.setAutoSizeTextTypeUniformWithConfiguration(16, 30, 1,
+                android.util.TypedValue.COMPLEX_UNIT_SP);
+        jiraKey.setMaxLines(2);
+        card.addView(jiraKey);
+        TextView edit = text(getString(R.string.tap_edit_jira), 12, 0xFF33483E);
+        card.addView(edit);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+        cardParams.topMargin = dp(16);
+        root.addView(card, cardParams);
 
         dial = new TimerDialView(this);
         dial.setId(R.id.timer_dial);
@@ -232,6 +270,10 @@ public final class MainActivity extends Activity {
     private void render() {
         long remaining = state.remaining(SystemClock.elapsedRealtime());
         boolean breakPhase = state.phase == TimerState.Phase.BREAK;
+        jiraLabel.setText(breakPhase ? R.string.return_to_jira : R.string.current_jira);
+        String key = workPreferences.getString("jiraKey", "");
+        String displayedKey = key.isEmpty() ? getString(R.string.set_jira) : key;
+        if (!displayedKey.contentEquals(jiraKey.getText())) jiraKey.setText(displayedKey);
         dial.update(remaining, state);
         String label = state.running ? getString(R.string.pause_timer) : state.finished
                 ? (breakPhase ? getString(R.string.start_focus, state.focusDuration / TimerState.MINUTE) : getString(R.string.start_break))
@@ -248,6 +290,46 @@ public final class MainActivity extends Activity {
         alerts.setText(R.string.allow_alerts);
         if (state.running) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    private void editJira(String draft) {
+        String previous = workPreferences.getString("jiraKey", "");
+        jiraEditor = new EditText(this);
+        jiraEditor.setSingleLine(true);
+        jiraEditor.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        jiraEditor.setHint(R.string.jira_hint);
+        jiraEditor.setText(draft == null ? previous : draft);
+        jiraEditor.selectAll();
+        jiraEditor.setContentDescription(getString(R.string.jira_field));
+        LinearLayout container = new LinearLayout(this);
+        container.setPadding(dp(24), dp(8), dp(24), 0);
+        container.addView(jiraEditor, new LinearLayout.LayoutParams(-1, -2));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.jira_field).setView(container)
+                .setPositiveButton(R.string.save_jira, null)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setNeutralButton(R.string.clear_jira, (d, which) -> {
+                    workPreferences.edit().remove("jiraKey").apply();
+                    render();
+                }).create();
+        dialog.setOnDismissListener(d -> jiraEditor = null);
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+                String normalized = JiraKey.normalize(jiraEditor.getText().toString(), previous);
+                if (normalized == null) {
+                    jiraEditor.setError(getString(R.string.invalid_jira));
+                    return;
+                }
+                workPreferences.edit().putString("jiraKey", normalized).apply();
+                render();
+                dialog.dismiss();
+            });
+            jiraEditor.requestFocus();
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        });
+        dialog.show();
     }
 
     private void updateBackground(boolean breakPhase) {
@@ -297,6 +379,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
+        if (jiraEditor != null) outState.putString("jiraDraft", jiraEditor.getText().toString());
         outState.putBoolean("startAfterPermission", startAfterPermission);
         outState.putBoolean("pendingFocusAgain", pendingFocusAgain);
         super.onSaveInstanceState(outState);

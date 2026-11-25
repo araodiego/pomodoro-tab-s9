@@ -116,6 +116,14 @@ public final class TimerStateTest {
                 "After the clock moves backward, rearming keeps four actual minutes");
         check(legacy.remaining(60_100) == 4 * TimerState.MINUTE,
                 "Wall-clock alarm conversion cannot change the countdown");
-        System.out.println("Passed " + checks + " timer behavior checks.");
+        check("PROJECT-1234".equals(JiraKey.normalize(" project-1234 ", "")), "Keys are trimmed and normalized to uppercase");
+        check("PROJECT-5678".equals(JiraKey.normalize("5678", "PROJECT-1234")), "Number-only entry reuses the saved prefix");
+        check(JiraKey.normalize("1234", "") == null, "First key requires a project prefix");
+        check(JiraKey.normalize("", "PROJECT-1234") == null, "Empty key requires explicit Clear");
+        check(JiraKey.normalize("PROJECT-1234 extra", "") == null, "Invalid key text is rejected");
+        check("OTHER-98765".equals(JiraKey.normalize("other-98765", "PROJECT-1234")), "Full keys can switch project and support longer issue numbers");
+        check(JiraKey.normalize(null, "") == null, "Null key input is rejected");
+        check(JiraKey.normalize("PROJECT-0", "") == null, "Issue number must be positive");
+        System.out.println("Passed " + checks + " timer and JIRA behavior checks.");
     }
 }

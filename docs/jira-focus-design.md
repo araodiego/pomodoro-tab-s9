@@ -1,6 +1,6 @@
 # Current JIRA: three design options
 
-Branch: `work/jira-focus`, based on the existing v0.2 timer. This document is a design proposal; the current JIRA input/display is not implemented yet.
+Branch: `work/jira-focus`, based on the existing v0.2 timer. Option 1 is implemented in version 0.3-work. The other options remain design alternatives.
 
 The work variant should make one current JIRA key easy to read while preserving the physical-style timer, manual five-minute break flow, and focus/break colors.
 

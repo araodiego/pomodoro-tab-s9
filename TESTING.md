@@ -1,7 +1,9 @@
-# Validation for 0.2
+# Validation for 0.3-work
+
+All 63 timer and JIRA behavior checks pass. JIRA parsing covers full keys, normalization, number-only entry, changing projects, and invalid input. On-device UI checks remain pending: edit/save/cancel/clear the card during a running timer, rotate with the editor open, relaunch to verify persistence, and check the RETURN TO label during a break.
 
 - APK assembled successfully with Android SDK 36, AGP 8.13.2, Gradle 8.13, and JDK 17.
-- `scripts/test.ps1`: all 55 countdown behavior checks pass, covering manual focus/break transitions, late starts, pause/resume, custom focus length, old notification tokens, and alarm-time conversion.
+- `scripts/test.ps1`: all 63 timer and JIRA checks pass, covering manual focus/break transitions, late starts, pause/resume, custom focus length, old notification tokens, alarm-time conversion, and JIRA input.
 - `lintDebug`: passes with no issues. The report is included in the source archive.
 - Tablet emulator testing was attempted but could not start because the installed emulator tried to write configuration files outside the permitted workspace. No emulator interaction or audible-alert result is claimed.
 

@@ -2,13 +2,15 @@
 
 PomodoroTimer for tab Samsung S9
 
-Work variant design: [three current-JIRA display options](docs/jira-focus-design.md), being developed on `work/jira-focus`.
+Work variant on `work/jira-focus`: **Pomodoro Work** installs alongside the personal timer. A cream card above the dial shows the current JIRA. Tap it to enter a full issue key, save it, or clear it. After saving a key, entering just a number reuses that project prefix. The card says RETURN TO during breaks. Editing the key leaves the countdown running; the key is stored locally and survives restarts.
+
+Install `Pomodoro-Work-0.3.apk` for this variant. The personal app has its own independent timer and preferences. See the [original design options](docs/jira-focus-design.md).
 
 A personal, offline Android timer for Arao's Galaxy Tab S9. A physical-style focus dial, a five-minute break, and a short bell at each completion.
 
 ## Use it on the tablet
 
-1. Copy **Pomodoro-0.2.apk** to the Tab S9 using Quick Share or a USB cable. It updates the original personal installation.
+1. Copy **Pomodoro-Work-0.3.apk** to the Tab S9 using Quick Share or a USB cable. It installs as a separate work app.
 2. Open the APK in **My Files**. If Android asks, allow that app to install this APK.
 3. Open **Pomodoro**. Drag the outside of the dial to choose **1–60 minutes**.
 4. Tap **Start** and allow notifications so the bell can play with the screen off.

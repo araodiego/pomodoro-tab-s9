@@ -8,7 +8,7 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="Pomodoro"
+        android:label="Pomodoro Work"
         android:icon="@drawable/ic_timer"
         android:theme="@style/AppTheme"
         android:supportsRtl="true">
