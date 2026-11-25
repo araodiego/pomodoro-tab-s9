@@ -2,6 +2,8 @@
 
 PomodoroTimer for tab Samsung S9
 
+Work variant design: [three current-JIRA display options](docs/jira-focus-design.md), being developed on `work/jira-focus`.
+
 A personal, offline Android timer for Arao's Galaxy Tab S9. A physical-style focus dial, a five-minute break, and a short bell at each completion.
 
 ## Use it on the tablet
