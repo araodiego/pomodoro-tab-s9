@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -20,6 +21,17 @@
         </activity>
         <receiver android:name=".TimerReceiver" android:exported="false" />
         <receiver android:name=".TimerActionReceiver" android:exported="false" />
+        <receiver android:name=".MeetingAlarmReceiver" android:exported="false" />
+        <receiver android:name=".MeetingActionReceiver" android:exported="false" />
+        <receiver android:name=".MeetingScheduleReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".ClockChangeReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.TIME_SET" />

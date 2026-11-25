@@ -8,6 +8,20 @@ import java.util.UUID;
 final class TimerController {
     private TimerController() {}
 
+    static boolean pause(Context context, String expectedToken) {
+        TimerState state = finishIfDue(context);
+        if (!state.running || expectedToken == null || !state.token.equals(expectedToken)) return false;
+        long now = SystemClock.elapsedRealtime();
+        if (state.remaining(now) == 0) {
+            finishIfDue(context);
+            return false;
+        }
+        state.pause(now);
+        TimerStore.save(context, state);
+        TimerAlarms.cancelAlarm(context);
+        return true;
+    }
+
     static boolean start(Context context, boolean focusAgain, String completionToken) {
         TimerState previous = TimerStore.load(context);
         if (previous.running || (completionToken != null && !previous.matchesCompletion(completionToken))) {

@@ -27,6 +27,9 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ScrollView;
+import java.time.Instant;
+import java.util.List;
 
 public final class MainActivity extends Activity {
     private static boolean visible;
@@ -42,6 +45,15 @@ public final class MainActivity extends Activity {
     private TextView jiraLabel;
     private TextView jiraKey;
     private EditText jiraEditor;
+    private MeetingRibbonView ribbon;
+    private MeetingRibbonView expandedRibbon;
+    private AlertDialog ribbonDialog;
+    private MeetingEditor meetingEditor;
+    private AlertDialog meetingPrompt;
+    private int promptId = -1;
+    private long promptOccurrence;
+    private long lastRibbonMinute = Long.MIN_VALUE;
+    private List<MeetingSchedule> meetings;
     private SharedPreferences workPreferences;
     private boolean startAfterPermission;
     private boolean pendingFocusAgain;
@@ -57,6 +69,7 @@ public final class MainActivity extends Activity {
         @Override public void run() {
             if (state.running && state.remaining(SystemClock.elapsedRealtime()) == 0) finishIfDue();
             render();
+            updateMeetings();
             handler.postDelayed(this, 200);
         }
     };
@@ -64,6 +77,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         TimerAlarms.createChannel(this);
+        MeetingAlarms.channels(this);
         state = TimerStore.load(this);
         if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
         preferences = getSharedPreferences("timer", MODE_PRIVATE);
@@ -75,6 +89,10 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         buildScreen();
+        if (savedInstanceState != null && savedInstanceState.containsKey("meetingDraft")) {
+            Bundle draft = savedInstanceState.getBundle("meetingDraft");
+            root.post(() -> editMeeting(draft.getInt("id"), draft));
+        }
         if (savedInstanceState != null && savedInstanceState.containsKey("jiraDraft")) {
             String draft = savedInstanceState.getString("jiraDraft");
             root.post(() -> editJira(draft));
@@ -134,6 +152,20 @@ public final class MainActivity extends Activity {
         cardParams.topMargin = dp(16);
         root.addView(card, cardParams);
 
+        int widthDp = getResources().getConfiguration().screenWidthDp;
+        int heightDp = getResources().getConfiguration().screenHeightDp;
+        boolean wide = widthDp >= 640 && widthDp > heightDp && heightDp >= 440;
+        boolean compact = !wide && (widthDp < 600 || heightDp < 720);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        bodyParams.topMargin = dp(12);
+        root.addView(body, bodyParams);
+        LinearLayout timerPanel = new LinearLayout(this);
+        timerPanel.setOrientation(LinearLayout.VERTICAL);
+        timerPanel.setGravity(Gravity.CENTER_HORIZONTAL);
+        body.addView(timerPanel, wide ? new LinearLayout.LayoutParams(0, -1, 1)
+                : new LinearLayout.LayoutParams(-1, 0, 1));
         dial = new TimerDialView(this);
         dial.setId(R.id.timer_dial);
         dial.setListener(minutes -> {
@@ -142,12 +174,12 @@ public final class MainActivity extends Activity {
             TimerStore.save(this, state);
             render();
         });
-        root.addView(dial, new LinearLayout.LayoutParams(-1, 0, 1));
+        timerPanel.addView(dial, new LinearLayout.LayoutParams(-1, 0, 1));
 
         instruction = text("Turn the dial to set your minutes", 14, 0xFFB4C0B6);
         instruction.setMinHeight(dp(38));
         instruction.setGravity(Gravity.CENTER);
-        root.addView(instruction);
+        timerPanel.addView(instruction);
 
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
@@ -180,29 +212,122 @@ public final class MainActivity extends Activity {
             secondary.setLayoutParams(new LinearLayout.LayoutParams(stacked ? -1 : dp(116), -2));
             controls.requestLayout();
         });
-        root.addView(controlFrame, new LinearLayout.LayoutParams(-1, -2));
+        timerPanel.addView(controlFrame, new LinearLayout.LayoutParams(-1, -2));
+
+        ribbon = new MeetingRibbonView(this, compact, ribbonActions());
+        ScrollView ribbonScroll = new ScrollView(this);
+        ribbonScroll.setFillViewport(false);
+        ribbonScroll.addView(ribbon, new ScrollView.LayoutParams(-1,-2));
+        LinearLayout.LayoutParams ribbonParams = wide ? new LinearLayout.LayoutParams(0,-1,1)
+                : new LinearLayout.LayoutParams(-1,-2);
+        if (wide) ribbonParams.setMarginStart(dp(16));
+        else ribbonParams.topMargin = dp(10);
+        body.addView(ribbonScroll,ribbonParams);
 
         alerts = text("", 12, 0xFFE9B49A);
         alerts.setPadding(0, dp(12), 0, 0);
         alerts.setGravity(Gravity.CENTER);
         alerts.setOnClickListener(view -> openNotificationSettings());
         root.addView(alerts);
-        setContentView(root);
+        if (heightDp < 540) {
+            ScrollView screen = new ScrollView(this);
+            screen.setFillViewport(true);
+            screen.addView(root,new ScrollView.LayoutParams(-1,dp(620)));
+            setContentView(screen);
+        } else setContentView(root);
+    }
+
+    private MeetingRibbonView.Actions ribbonActions() {
+        return new MeetingRibbonView.Actions() {
+            @Override public void edit(int id) { editMeeting(id,null); }
+            @Override public void expand() { showRibbon(); }
+            @Override public void settings() { requestMeetingAlerts(); }
+        };
+    }
+
+    private void showRibbon() {
+        expandedRibbon = new MeetingRibbonView(this,false,ribbonActions());
+        expandedRibbon.render(Instant.now(),MeetingStore.all(this));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(expandedRibbon);
+        ribbonDialog = new AlertDialog.Builder(this).setView(scroll).setPositiveButton("Done",null).create();
+        ribbonDialog.setOnDismissListener(d -> { expandedRibbon = null; ribbonDialog = null; });
+        ribbonDialog.show();
+    }
+
+    private void editMeeting(int id, Bundle draft) {
+        if (meetingEditor != null) return;
+        meetingEditor = new MeetingEditor(this,id,draft,() -> {
+            lastRibbonMinute = Long.MIN_VALUE;
+            updateMeetings();
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},11);
+        }, () -> meetingEditor = null);
+        meetingEditor.dialog.show();
+    }
+
+    private void requestMeetingAlerts() {
+        if (!TimerAlarms.canSchedule(this) && Build.VERSION.SDK_INT >= 31) {
+            startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    Uri.parse("package:" + getPackageName())));
+        } else if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+                && shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},11);
+        } else openNotificationSettings();
+    }
+
+    private void updateMeetings() {
+        Instant now = Instant.now();
+        long minute = now.getEpochSecond()/60;
+        if (minute != lastRibbonMinute) {
+            lastRibbonMinute = minute;
+            meetings = MeetingStore.all(this);
+            if (!TimerAlarms.canSchedule(this)) MeetingAlarms.refresh(this);
+            ribbon.render(now,meetings);
+            if (expandedRibbon != null) expandedRibbon.render(now,meetings);
+        }
+        if (meetingPrompt != null) {
+            if (MeetingStore.pending(this,MeetingStore.load(this,promptId)) != promptOccurrence)
+                meetingPrompt.dismiss();
+            return;
+        }
+        if (meetingEditor != null || jiraEditor != null || ribbonDialog != null || !visible) return;
+        for (MeetingSchedule meeting : meetings) {
+            long occurrence = MeetingStore.pending(this,meeting);
+            if (occurrence != 0) {
+                promptMeeting(meeting,occurrence);
+                break;
+            }
+        }
+    }
+
+    private void promptMeeting(MeetingSchedule meeting, long occurrence) {
+        TimerState current = TimerController.finishIfDue(this);
+        promptId = meeting.id();
+        promptOccurrence = occurrence;
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle(meeting.name() + " starts now")
+                .setMessage(MeetingSchedule.brazilTime(Instant.ofEpochMilli(occurrence)) + " São Paulo"
+                        + (current.running ? "\nYour timer can wait for the meeting." : ""))
+                .setNegativeButton(current.running ? "Keep focusing" : "Got it",
+                        (d,w) -> MeetingAlarms.acknowledge(this,meeting,occurrence));
+        if (current.running) builder.setPositiveButton("Pause for meeting",(d,w) -> {
+            TimerController.pause(this,current.token);
+            MeetingAlarms.acknowledge(this,meeting,occurrence);
+        });
+        meetingPrompt = builder.create();
+        meetingPrompt.setOnCancelListener(d -> MeetingAlarms.acknowledge(this,meeting,occurrence));
+        meetingPrompt.setOnDismissListener(d -> meetingPrompt = null);
+        meetingPrompt.show();
     }
 
     private void onStartPressed() {
         state = TimerStore.load(this);
         if (state.running) {
-            finishIfDue();
-            if (state.running) {
-                long now = SystemClock.elapsedRealtime();
-                if (state.remaining(now) == 0) finishIfDue();
-                else {
-                    TimerAlarms.cancel(this);
-                    state.pause(now);
-                    TimerStore.save(this, state);
-                }
-            }
+            TimerController.pause(this,state.token);
+            state = TimerStore.load(this);
             render();
             return;
         }
@@ -359,6 +484,8 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         visible = true;
+        MeetingAlarms.refresh(this);
+        lastRibbonMinute = Long.MIN_VALUE;
         preferences.registerOnSharedPreferenceChangeListener(stateChanged);
         state = TimerStore.load(this);
         if (state.running && state.remaining(SystemClock.elapsedRealtime()) > 0 && TimerAlarms.canSchedule(this)) {
@@ -373,6 +500,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         visible = false;
+        if (meetingPrompt != null) meetingPrompt.dismiss();
         preferences.unregisterOnSharedPreferenceChangeListener(stateChanged);
         handler.removeCallbacks(ticker);
         super.onPause();
@@ -380,6 +508,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle outState) {
         if (jiraEditor != null) outState.putString("jiraDraft", jiraEditor.getText().toString());
+        if (meetingEditor != null) outState.putBundle("meetingDraft",meetingEditor.draft());
         outState.putBoolean("startAfterPermission", startAfterPermission);
         outState.putBoolean("pendingFocusAgain", pendingFocusAgain);
         super.onSaveInstanceState(outState);

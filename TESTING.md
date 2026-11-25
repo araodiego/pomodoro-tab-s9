@@ -1,4 +1,19 @@
-# Validation for 0.3-work
+# Validation for 0.4-work
+
+My Day Ribbon adds 24 dependency-free meeting schedule checks to the existing 63 timer and JIRA checks. The meeting checks cover New York seasonal offsets, both DST transitions, weekday and weekend recurrence, editing, chronological display, and rejection of premature, stale or disabled reminders.
+
+## Meeting device checks
+
+1. Open My Day, edit both meeting times, verify the New York and future clock-change previews, save and reopen the app.
+2. Schedule a meeting several minutes ahead with an advance reminder; start a focus timer. Check the advance notification and amber highlight, then the start prompt. Pause, verify the remaining time, and resume after a delay.
+3. Repeat with the screen locked and with the app minimized; verify different sounds and direct notification actions. Check permissions and notification channel settings.
+4. Change or disable a meeting after scheduling; verify old alarms do not ring. Reboot with a future meeting configured and verify the reminder after unlocking.
+5. Rotate during editing, test both tablet orientations, phone and split-screen, and verify no timer controls or meeting rows are clipped.
+6. Schedule a meeting at the same instant as the timer completion; confirm the meeting and timer state are both correct. Try an old meeting action after starting a new timer.
+
+Real-device checks are pending.
+
+## Previous timer validation
 
 All 63 timer and JIRA behavior checks pass. JIRA parsing covers full keys, normalization, number-only entry, changing projects, and invalid input. On-device UI checks remain pending: edit/save/cancel/clear the card during a running timer, rotate with the editor open, relaunch to verify persistence, and check the RETURN TO label during a break.
 
