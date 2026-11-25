@@ -159,7 +159,7 @@ final class MeetingRibbonView extends LinearLayout {
         actionLabel.setPadding(dp(8),dp(4),dp(8),dp(4));
         tile.addView(actionLabel);
         tile.setFocusable(true);
-        tile.setContentDescription(meeting.name() + ", " + action);
+        tile.setContentDescription(name + (status.isEmpty() ? "" : ". " + status) + ". " + action);
         tile.setOnClickListener(view -> actions.edit(meeting.id()));
         LayoutParams layout = new LayoutParams(-1,-2);
         layout.topMargin = dp(8);
@@ -198,7 +198,9 @@ final class MeetingRibbonView extends LinearLayout {
             TextView edit = label("Edit",13,INK,true);
             row.addView(edit);
             row.setFocusable(true);
-            row.setContentDescription(name + ", " + time + ", " + status + ", edit meeting");
+            String spokenStatus = status.replaceAll("(\\d+)h ", "$1 hours ").replaceAll("(\\d+) ?min$", "$1 minutes")
+                    .replaceAll("\\b1 hours\\b","1 hour").replaceAll("\\b1 minutes\\b","1 minute");
+            row.setContentDescription(name + " at " + time + ", " + spokenStatus + ". Edit meeting");
             row.setOnClickListener(v -> actions.edit(id));
         }
         LayoutParams params = new LayoutParams(-1,-2);

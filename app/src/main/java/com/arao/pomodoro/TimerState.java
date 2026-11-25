@@ -32,6 +32,13 @@ public final class TimerState {
         return phase == Phase.FOCUS && !running && !finished;
     }
 
+    public String primaryAction() {
+        String phaseName = phase == Phase.FOCUS ? "focus" : "break";
+        if (running) return "Pause " + phaseName;
+        if (finished) return phase == Phase.FOCUS ? "Start break" : "Start focus";
+        return (pausedRemaining < duration || !token.isEmpty() ? "Resume " : "Start ") + phaseName;
+    }
+
     /** The primary action waits for a tap at each phase boundary. */
     public boolean startNext(long now, String newToken) {
         if (running) return false;
@@ -77,7 +84,6 @@ public final class TimerState {
         pausedRemaining = remaining(now);
         running = false;
         finished = pausedRemaining == 0;
-        if (!finished) token = "";
     }
 
     public void reset() {

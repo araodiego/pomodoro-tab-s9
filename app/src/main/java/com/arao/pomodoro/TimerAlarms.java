@@ -53,9 +53,11 @@ final class TimerAlarms {
         long trigger = state.alarmAtWallTime(System.currentTimeMillis(), SystemClock.elapsedRealtime());
         context.getSystemService(AlarmManager.class).setAlarmClock(
                 new AlarmManager.AlarmClockInfo(trigger, show), pending(context, state.token));
+        CountdownNotification.refresh(context,state);
     }
 
     static void cancel(Context context) {
+        CountdownNotification.cancel(context);
         cancelAlarm(context);
         dismissAlert(context);
     }
@@ -76,6 +78,7 @@ final class TimerAlarms {
     }
 
     static void signalFinished(Context context, TimerState state) {
+        CountdownNotification.cancel(context);
         if (!alertsEnabled(context)) {
             if (MainActivity.isVisible()) {
                 ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_ALARM, 90);

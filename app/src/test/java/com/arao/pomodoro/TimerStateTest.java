@@ -124,6 +124,24 @@ public final class TimerStateTest {
         check("OTHER-98765".equals(JiraKey.normalize("other-98765", "PROJECT-1234")), "Full keys can switch project and support longer issue numbers");
         check(JiraKey.normalize(null, "") == null, "Null key input is rejected");
         check(JiraKey.normalize("PROJECT-0", "") == null, "Issue number must be positive");
+        TimerState tile = new TimerState();
+        check(tile.primaryAction().equals("Start focus"), "Tile offers the initial focus session");
+        tile.startNext(100,"first");
+        check(tile.primaryAction().equals("Pause focus"), "Tile pauses a running focus");
+        tile.pause(1100);
+        check(tile.primaryAction().equals("Resume focus") && tile.token.equals("first"),
+                "Paused notification keeps a stable resume identity");
+        tile.startNext(2000,"second");
+        check(tile.remaining(2000) == tile.duration - 1000 && !tile.token.equals("first"),
+                "Resume preserves time and invalidates earlier notification actions");
+        tile.complete(tile.deadline,"second");
+        check(tile.primaryAction().equals("Start break"), "Completion offers a manual break");
+        tile.startNext(tile.deadline,"break");
+        check(tile.primaryAction().equals("Pause break"), "Tile pauses a running break");
+        tile.pause(tile.deadline-2000);
+        check(tile.primaryAction().equals("Resume break"), "Tile resumes the paused break");
+        tile.reset();
+        check(tile.token.isEmpty(), "Reset invalidates the paused notification");
         System.out.println("Passed " + checks + " timer and JIRA behavior checks.");
     }
 }

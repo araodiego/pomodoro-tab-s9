@@ -1,4 +1,10 @@
-# Validation for 0.4-work
+# Validation for 0.6-work
+
+The countdown and tile update adds eight state checks for start, pause, resume, manual breaks, and stale session identities. Run `scripts/test.ps1` for all 95 checks.
+
+On a Galaxy device, start a one-minute session, leave the app, and compare the live countdown against the dial. Pause from the notification, resume from the tile, and check that completion removes the countdown and rings once. Repeat during a break and after a meeting pause. Check notification redaction with sensitive lock-screen content hidden. Actual Now Bar placement, Text spotlight, Select to speak, and DeX window sizing require Samsung device validation.
+
+## Meeting schedule validation
 
 My Day Ribbon adds 24 dependency-free meeting schedule checks to the existing 63 timer and JIRA checks. The meeting checks cover New York seasonal offsets, both DST transitions, weekday and weekend recurrence, editing, chronological display, and rejection of premature, stale or disabled reminders.
 

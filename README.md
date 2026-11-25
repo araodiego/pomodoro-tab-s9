@@ -4,7 +4,13 @@ PomodoroTimer for tab Samsung S9
 
 Work variant on `work/jira-focus`: **Pomodoro Work** installs alongside the personal timer. A cream card above the dial shows the current JIRA. Tap it to enter a full issue key, save it, or clear it. After saving a key, entering just a number reuses that project prefix. The card says RETURN TO during breaks. Editing the key leaves the countdown running; the key is stored locally and survives restarts.
 
-Install `Pomodoro-Work-0.5.apk` for this variant. The personal app has its own independent timer and preferences. See the [original design options](docs/jira-focus-design.md).
+Install `Pomodoro-Work-0.6.apk` for this variant. The personal app has its own independent timer and preferences. See the [original design options](docs/jira-focus-design.md).
+
+## Live countdown and Quick Settings
+
+Start a focus session or break to see a silent system countdown with Pause. Pausing freezes the remaining time and offers Resume. The private notification includes your current Jira, and its public lock-screen version shows only the phase and countdown. Android notification privacy settings control which version appears. Supported devices can promote the running timer to a live system surface.
+
+Choose **More options → Add Pomodoro tile**, or add Pomodoro Work in the Quick panel editor. The tile controls the current device's timer and follows the same manual focus/break transitions as the app. The countdown also works independently of the tile.
 
 ## My Day Ribbon
 
@@ -21,7 +27,7 @@ A personal, offline Android timer for Arao's Galaxy Tab S9. A physical-style foc
 
 ## Use it on the tablet
 
-1. Copy **Pomodoro-Work-0.5.apk** to the Tab S9 using Quick Share or a USB cable. It upgrades the existing work app.
+1. Copy **Pomodoro-Work-0.6.apk** to the Tab S9 using Quick Share or a USB cable. It upgrades the existing work app.
 2. Open the APK in **My Files**. If Android asks, allow that app to install this APK.
 3. Open **Pomodoro**. Drag the outside of the dial to choose **1–60 minutes**.
 4. Tap **Start** and allow notifications so the bell can play with the screen off.

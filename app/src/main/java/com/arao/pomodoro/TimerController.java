@@ -19,6 +19,7 @@ final class TimerController {
         state.pause(now);
         TimerStore.save(context, state);
         TimerAlarms.cancelAlarm(context);
+        CountdownNotification.refresh(context,state);
         return true;
     }
 

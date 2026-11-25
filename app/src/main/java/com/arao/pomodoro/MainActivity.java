@@ -133,7 +133,18 @@ public final class MainActivity extends Activity {
             android.widget.PopupMenu menu = new android.widget.PopupMenu(this,view,Gravity.END);
             boolean show = ribbonScroll.getVisibility() != View.VISIBLE;
             menu.getMenu().add(show ? "Show My Day" : "Hide My Day");
+            if (Build.VERSION.SDK_INT >= 33) menu.getMenu().add(0,1,1,"Add Pomodoro tile");
             menu.setOnMenuItemClickListener(item -> {
+                if (item.getItemId() == 1 && Build.VERSION.SDK_INT >= 33) {
+                    getSystemService(android.app.StatusBarManager.class).requestAddTileService(
+                            new android.content.ComponentName(this,PomodoroTile.class),"Pomodoro Work",
+                            android.graphics.drawable.Icon.createWithResource(this,R.drawable.ic_timer),
+                            getMainExecutor(),result -> {
+                                if (result == android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED)
+                                    Toast.makeText(this,"Pomodoro tile already added",Toast.LENGTH_SHORT).show();
+                            });
+                    return true;
+                }
                 setRibbonVisible(show);
                 return true;
             });
@@ -162,6 +173,7 @@ public final class MainActivity extends Activity {
         jiraLabel.setLetterSpacing(.08f);
         card.addView(jiraLabel);
         jiraKey = text("", 28, 0xFF192522);
+        jiraKey.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         jiraKey.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         jiraKey.setAutoSizeTextTypeUniformWithConfiguration(16, 30, 1,
                 android.util.TypedValue.COMPLEX_UNIT_SP);
@@ -175,6 +187,12 @@ public final class MainActivity extends Activity {
 
         int widthDp = getResources().getConfiguration().screenWidthDp;
         int heightDp = getResources().getConfiguration().screenHeightDp;
+        if (heightDp < 540) {
+            subtitle.setVisibility(View.GONE);
+            cardParams.topMargin = dp(4);
+            card.setMinimumHeight(dp(60));
+            card.setPadding(dp(12),dp(6),dp(12),dp(6));
+        }
         boolean wide = widthDp >= 640 && widthDp > heightDp && heightDp >= 440;
         boolean compact = !wide && (widthDp < 600 || heightDp < 720);
         LinearLayout body = new LinearLayout(this);
@@ -263,7 +281,8 @@ public final class MainActivity extends Activity {
         if (heightDp < 540) {
             ScrollView screen = new ScrollView(this);
             screen.setFillViewport(true);
-            screen.addView(root,new ScrollView.LayoutParams(-1,dp(620)));
+            root.setMinimumHeight(dp(440));
+            screen.addView(root,new ScrollView.LayoutParams(-1,-2));
             setContentView(screen);
         } else setContentView(root);
     }
@@ -488,6 +507,7 @@ public final class MainActivity extends Activity {
                 .setNegativeButton(android.R.string.cancel, null)
                 .setNeutralButton(R.string.clear_jira, (d, which) -> {
                     workPreferences.edit().remove("jiraKey").apply();
+                    CountdownNotification.refresh(this,TimerStore.load(this));
                     render();
                 }).create();
         dialog.setOnDismissListener(d -> jiraEditor = null);
@@ -499,6 +519,7 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 workPreferences.edit().putString("jiraKey", normalized).apply();
+                CountdownNotification.refresh(this,TimerStore.load(this));
                 render();
                 dialog.dismiss();
             });
@@ -547,6 +568,7 @@ public final class MainActivity extends Activity {
             }
         }
         ticker.run();
+        if (!state.running) CountdownNotification.refresh(this,state);
     }
 
     @Override protected void onPause() {
