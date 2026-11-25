@@ -19,5 +19,11 @@
             </intent-filter>
         </activity>
         <receiver android:name=".TimerReceiver" android:exported="false" />
+        <receiver android:name=".TimerActionReceiver" android:exported="false" />
+        <receiver android:name=".ClockChangeReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

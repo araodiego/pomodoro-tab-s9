@@ -1,0 +1,27 @@
+<resources>
+    <string name="start_timer">Start</string>
+    <string name="pause_timer">Pause</string>
+    <string name="resume_timer">Resume</string>
+    <string name="reset_timer">Reset</string>
+    <string name="start_break">Start 5-minute break</string>
+    <string name="start_focus">Start focus · %1$d min</string>
+    <string name="focus_again">Focus again</string>
+    <string name="end_break">End break</string>
+    <string name="focus_complete">Focus complete</string>
+    <string name="break_complete">Break complete</string>
+    <string name="focus_notification">Ready for a break? Tap below to start five minutes.</string>
+    <string name="break_notification">Your break has finished. Start focusing when you are ready.</string>
+    <string name="focus_ready_hint">Turn the dial to set your minutes</string>
+    <string name="focus_running_hint">Your time is yours.</string>
+    <string name="paused_hint">Paused. Continue whenever you are ready.</string>
+    <string name="focus_complete_hint">Focus complete. Your break starts when you tap.</string>
+    <string name="break_running_hint">Take a breath. This is your break.</string>
+    <string name="break_complete_hint">Break complete. Ready when you are.</string>
+    <string name="phase_focus">FOCUS</string>
+    <string name="phase_break">BREAK</string>
+    <string name="phase_focus_ready">FOCUS · READY</string>
+    <string name="phase_focus_paused">FOCUS · PAUSED</string>
+    <string name="phase_break_paused">BREAK · PAUSED</string>
+    <string name="phase_focus_complete">FOCUS COMPLETE</string>
+    <string name="phase_break_complete">BREAK COMPLETE</string>
+</resources>

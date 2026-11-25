@@ -3,7 +3,11 @@ package com.arao.pomodoro;
 /** Countdown arithmetic uses a monotonic clock, so changing the device time cannot move it. */
 public final class TimerState {
     public static final long MINUTE = 60_000L;
-    public long duration = 25 * MINUTE;
+    public static final long BREAK_DURATION = 5 * MINUTE;
+    public enum Phase { FOCUS, BREAK }
+    public Phase phase = Phase.FOCUS;
+    public long focusDuration = 25 * MINUTE;
+    public long duration = focusDuration;
     public long pausedRemaining = duration;
     public long deadline;
     public boolean running;
@@ -14,10 +18,49 @@ public final class TimerState {
         return running ? Math.max(0L, deadline - now) : pausedRemaining;
     }
 
+    public long alarmAtWallTime(long wallNow, long elapsedNow) {
+        return wallNow + remaining(elapsedNow);
+    }
+
     public void selectMinutes(int minutes) {
-        if (running) return;
-        duration = Math.max(1, Math.min(60, minutes)) * MINUTE;
+        if (!canAdjustDial()) return;
+        focusDuration = Math.max(1, Math.min(60, minutes)) * MINUTE;
         reset();
+    }
+
+    public boolean canAdjustDial() {
+        return phase == Phase.FOCUS && !running && !finished;
+    }
+
+    /** The primary action waits for a tap at each phase boundary. */
+    public boolean startNext(long now, String newToken) {
+        if (running) return false;
+        if (finished && phase == Phase.FOCUS) return startBreak(now, newToken);
+        if (finished && phase == Phase.BREAK) return startFocus(now, newToken);
+        start(now, newToken);
+        return true;
+    }
+
+    public boolean startBreak(long now, String newToken) {
+        if (running || !finished || phase != Phase.FOCUS) return false;
+        phase = Phase.BREAK;
+        duration = BREAK_DURATION;
+        pausedRemaining = duration;
+        finished = false;
+        start(now, newToken);
+        return true;
+    }
+
+    public boolean startFocus(long now, String newToken) {
+        if (running) return false;
+        reset();
+        start(now, newToken);
+        return true;
+    }
+
+    public boolean matchesCompletion(String expectedToken) {
+        return finished && !running && expectedToken != null && !expectedToken.isEmpty()
+                && token.equals(expectedToken);
     }
 
     public void start(long now, String newToken) {
@@ -34,10 +77,12 @@ public final class TimerState {
         pausedRemaining = remaining(now);
         running = false;
         finished = pausedRemaining == 0;
-        token = "";
+        if (!finished) token = "";
     }
 
     public void reset() {
+        phase = Phase.FOCUS;
+        duration = focusDuration;
         pausedRemaining = duration;
         deadline = 0;
         running = false;
@@ -50,7 +95,6 @@ public final class TimerState {
         running = false;
         finished = true;
         pausedRemaining = 0;
-        token = "";
         return true;
     }
 

@@ -1,7 +1,7 @@
-# Validation for 0.1
+# Validation for 0.2
 
 - APK assembled successfully with Android SDK 36, AGP 8.13.2, Gradle 8.13, and JDK 17.
-- `scripts/test.ps1`: 19 countdown behavior checks pass.
+- `scripts/test.ps1`: all 55 countdown behavior checks pass, covering manual focus/break transitions, late starts, pause/resume, custom focus length, old notification tokens, and alarm-time conversion.
 - `lintDebug`: passes with no issues. The report is included in the source archive.
 - Tablet emulator testing was attempted but could not start because the installed emulator tried to write configuration files outside the permitted workspace. No emulator interaction or audible-alert result is claimed.
 
@@ -10,7 +10,13 @@
 1. Open the app and allow notifications.
 2. Turn the dial to 1 minute. Tap Start, then Pause, and confirm the number stops changing.
 3. Tap Resume, lock the screen, and check that the completion bell plays.
-4. Open the app again and confirm it shows `00:00` and Start again.
-5. Try a 25-minute session and rotate the tablet while it runs.
+4. Open the app again and confirm it shows `00:00`, FOCUS COMPLETE, the green background, and **Start 5-minute break**.
+5. Wait two minutes, then start the break. Confirm it starts at `05:00`, says BREAK, and fades to blue.
+6. Pause and resume the break. Confirm it stays blue and retains its remaining time.
+7. Let the break finish with the screen off. Confirm the bell and **Start focus** notification action. Start the next focus and confirm the original focus duration and green background.
+8. Try **Focus again** after focus completion and **End break** during a break.
+9. Start a break from the focus-completion notification. Tap a stale or repeated notification action and confirm it does not restart or replace the current timer.
+10. Try a custom 40-minute focus duration and rotate the tablet while each phase is running or paused. Confirm the focus length survives a full break.
+11. During a running break, adjust the device clock forward or backward. Confirm the remaining countdown is unchanged and the alarm still rings when it reaches zero. Restore automatic time afterwards.
 
 Also try Samsung split screen and S Pen input. These need device testing before considering this version validated for daily use.

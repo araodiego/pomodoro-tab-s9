@@ -8,13 +8,14 @@ android {
         applicationId 'com.arao.pomodoro'
         minSdk 26
         targetSdk 36
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 2
+        versionName '0.2.0'
     }
 
     signingConfigs {
         debug {
-            storeFile rootProject.file('development/debug.keystore')
+            def personalKey = rootProject.file('development/debug.keystore')
+            if (personalKey.exists()) storeFile personalKey
         }
     }
 

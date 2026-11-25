@@ -37,11 +37,16 @@ public final class TimerDialView extends View {
 
     public void setListener(Listener value) { listener = value; }
 
-    public void update(long millis, long duration, boolean running, boolean finished) {
+    public void update(long millis, TimerState state) {
         remaining = millis;
-        selectedMinutes = (int) (duration / TimerState.MINUTE);
-        adjustable = !running;
-        status = finished ? "TIME'S UP" : running ? "FOCUS" : millis < duration ? "PAUSED" : "READY";
+        selectedMinutes = (int) (state.duration / TimerState.MINUTE);
+        adjustable = state.canAdjustDial();
+        boolean breakPhase = state.phase == TimerState.Phase.BREAK;
+        int label = state.finished ? (breakPhase ? R.string.phase_break_complete : R.string.phase_focus_complete)
+                : state.running ? (breakPhase ? R.string.phase_break : R.string.phase_focus)
+                : millis < state.duration ? (breakPhase ? R.string.phase_break_paused : R.string.phase_focus_paused)
+                : R.string.phase_focus_ready;
+        status = getContext().getString(label);
         String description = "Timer, " + TimerState.format(millis) + ", " + status.toLowerCase(java.util.Locale.US)
                 + (adjustable ? ". Swipe up or down to adjust minutes." : "");
         if (!description.contentEquals(getContentDescription() == null ? "" : getContentDescription())) {
@@ -170,9 +175,10 @@ public final class TimerDialView extends View {
 
     @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
-        info.setClassName("android.widget.SeekBar");
+        info.setClassName(adjustable ? "android.widget.SeekBar" : "android.widget.ProgressBar");
         info.setRangeInfo(AccessibilityNodeInfo.RangeInfo.obtain(
-                AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_INT, 1, 60, selectedMinutes));
+                AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_FLOAT, adjustable ? 1 : 0, 60,
+                adjustable ? selectedMinutes : Math.min(60, remaining / (float) TimerState.MINUTE)));
         if (adjustable) {
             info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS);
             info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD);

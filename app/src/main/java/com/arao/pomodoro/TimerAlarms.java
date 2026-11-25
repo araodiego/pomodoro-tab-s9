@@ -14,6 +14,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 final class TimerAlarms {
     static final String CHANNEL = "timer_finished_v1";
@@ -46,12 +47,24 @@ final class TimerAlarms {
     }
 
     static void schedule(Context context, TimerState state) {
-        context.getSystemService(AlarmManager.class).setExactAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP, state.deadline, pending(context, state.token));
+        PendingIntent show = PendingIntent.getActivity(context, 2,
+                new Intent(context, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
+        // Five-minute breaks must not be delayed by the per-app idle alarm frequency limit.
+        long trigger = state.alarmAtWallTime(System.currentTimeMillis(), SystemClock.elapsedRealtime());
+        context.getSystemService(AlarmManager.class).setAlarmClock(
+                new AlarmManager.AlarmClockInfo(trigger, show), pending(context, state.token));
     }
 
     static void cancel(Context context) {
+        cancelAlarm(context);
+        dismissAlert(context);
+    }
+
+    static void cancelAlarm(Context context) {
         context.getSystemService(AlarmManager.class).cancel(pending(context, ""));
+    }
+
+    static void dismissAlert(Context context) {
         context.getSystemService(NotificationManager.class).cancel(NOTIFICATION_ID);
     }
 
@@ -62,7 +75,7 @@ final class TimerAlarms {
                 && channel.getImportance() != NotificationManager.IMPORTANCE_NONE;
     }
 
-    static void signalFinished(Context context) {
+    static void signalFinished(Context context, TimerState state) {
         if (!alertsEnabled(context)) {
             if (MainActivity.isVisible()) {
                 ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_ALARM, 90);
@@ -73,12 +86,21 @@ final class TimerAlarms {
         }
         PendingIntent open = PendingIntent.getActivity(context, 0,
                 new Intent(context, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
+        boolean breakFinished = state.phase == TimerState.Phase.BREAK;
+        String actionLabel = breakFinished ? context.getString(R.string.start_focus, state.focusDuration / TimerState.MINUTE)
+                : context.getString(R.string.start_break);
+        Intent next = new Intent(context, TimerActionReceiver.class)
+                .setAction(TimerActionReceiver.START_NEXT)
+                .setData(Uri.parse("pomodoro://next/" + state.token))
+                .putExtra("completionToken", state.token);
+        PendingIntent startNext = PendingIntent.getBroadcast(context, 1, next, PendingIntent.FLAG_IMMUTABLE);
         Notification notification = new Notification.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_timer)
-                .setContentTitle("Time's up")
-                .setContentText("Your timer has finished.")
+                .setContentTitle(context.getString(breakFinished ? R.string.break_complete : R.string.focus_complete))
+                .setContentText(context.getString(breakFinished ? R.string.break_notification : R.string.focus_notification))
                 .setCategory(Notification.CATEGORY_ALARM)
                 .setContentIntent(open)
+                .addAction(new Notification.Action.Builder(null, actionLabel, startNext).build())
                 .setAutoCancel(true)
                 .build();
         context.getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification);

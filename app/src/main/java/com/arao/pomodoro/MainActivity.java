@@ -1,8 +1,10 @@
 package com.arao.pomodoro;
 
 import android.Manifest;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -23,18 +25,28 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import java.util.UUID;
 
 public final class MainActivity extends Activity {
     private static boolean visible;
     static boolean isVisible() { return visible; }
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TimerState state;
+    private LinearLayout root;
     private TimerDialView dial;
     private Button start;
+    private Button secondary;
     private TextView instruction;
     private TextView alerts;
     private boolean startAfterPermission;
+    private boolean pendingFocusAgain;
+    private SharedPreferences preferences;
+    private Boolean displayedBreak;
+    private int displayedBackground = 0xFF192522;
+    private ValueAnimator backgroundFade;
+    private final SharedPreferences.OnSharedPreferenceChangeListener stateChanged = (prefs, key) -> {
+        state = TimerStore.load(this);
+        render();
+    };
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             if (state.running && state.remaining(SystemClock.elapsedRealtime()) == 0) finishIfDue();
@@ -48,13 +60,18 @@ public final class MainActivity extends Activity {
         TimerAlarms.createChannel(this);
         state = TimerStore.load(this);
         if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
+        preferences = getSharedPreferences("timer", MODE_PRIVATE);
+        if (savedInstanceState != null) {
+            startAfterPermission = savedInstanceState.getBoolean("startAfterPermission");
+            pendingFocusAgain = savedInstanceState.getBoolean("pendingFocusAgain");
+        }
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         buildScreen();
     }
 
     private void buildScreen() {
-        LinearLayout root = new LinearLayout(this);
+        root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setBackgroundColor(0xFF192522);
@@ -103,20 +120,29 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams startParams = new LinearLayout.LayoutParams(0, dp(58), 1);
         startParams.setMarginEnd(dp(12));
         controls.addView(start, startParams);
-        Button reset = button("Reset", false);
-        reset.setId(R.id.reset_timer);
-        reset.setOnClickListener(view -> {
-            TimerAlarms.cancel(this);
-            state.reset();
-            TimerStore.save(this, state);
-            render();
-        });
-        controls.addView(reset, new LinearLayout.LayoutParams(dp(116), dp(58)));
+        secondary = button(getString(R.string.reset_timer), false);
+        secondary.setId(R.id.reset_timer);
+        secondary.setOnClickListener(view -> onSecondaryPressed());
+        controls.addView(secondary, new LinearLayout.LayoutParams(dp(116), -2));
         FrameLayout controlFrame = new FrameLayout(this);
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        FrameLayout.LayoutParams controlsParams = new FrameLayout.LayoutParams(Math.min(dp(400), screenWidth - dp(48)), -2, Gravity.CENTER);
+        FrameLayout.LayoutParams controlsParams = new FrameLayout.LayoutParams(Math.min(dp(440), screenWidth - dp(48)), -2, Gravity.CENTER);
         controlFrame.addView(controls, controlsParams);
-        root.addView(controlFrame, new LinearLayout.LayoutParams(-1, dp(62)));
+        controlFrame.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            int width = Math.min(dp(440), right - left);
+            boolean stacked = width < dp(360) || getResources().getConfiguration().fontScale > 1.25f;
+            if (controls.getLayoutParams().width == width
+                    && controls.getOrientation() == (stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL)) return;
+            controls.getLayoutParams().width = width;
+            controls.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams primary = new LinearLayout.LayoutParams(stacked ? -1 : 0, -2, stacked ? 0 : 1);
+            primary.setMarginEnd(stacked ? 0 : dp(12));
+            primary.bottomMargin = stacked ? dp(8) : 0;
+            start.setLayoutParams(primary);
+            secondary.setLayoutParams(new LinearLayout.LayoutParams(stacked ? -1 : dp(116), -2));
+            controls.requestLayout();
+        });
+        root.addView(controlFrame, new LinearLayout.LayoutParams(-1, -2));
 
         alerts = text("", 12, 0xFFE9B49A);
         alerts.setPadding(0, dp(12), 0, 0);
@@ -127,16 +153,38 @@ public final class MainActivity extends Activity {
     }
 
     private void onStartPressed() {
+        state = TimerStore.load(this);
         if (state.running) {
             finishIfDue();
             if (state.running) {
-                TimerAlarms.cancel(this);
-                state.pause(SystemClock.elapsedRealtime());
-                TimerStore.save(this, state);
+                long now = SystemClock.elapsedRealtime();
+                if (state.remaining(now) == 0) finishIfDue();
+                else {
+                    TimerAlarms.cancel(this);
+                    state.pause(now);
+                    TimerStore.save(this, state);
+                }
             }
             render();
             return;
         }
+        requestStart(false);
+    }
+
+    private void onSecondaryPressed() {
+        state = TimerStore.load(this);
+        if (state.finished && state.phase == TimerState.Phase.FOCUS) {
+            requestStart(true);
+            return;
+        }
+        TimerAlarms.cancel(this);
+        state.reset();
+        TimerStore.save(this, state);
+        render();
+    }
+
+    private void requestStart(boolean focusAgain) {
+        pendingFocusAgain = focusAgain;
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
                 && !getPreferences(MODE_PRIVATE).getBoolean("askedAlerts", false)) {
@@ -145,27 +193,22 @@ public final class MainActivity extends Activity {
             requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, 10);
             return;
         }
-        startCountdown();
+        startCountdown(focusAgain);
     }
 
-    private void startCountdown() {
+    private void startCountdown(boolean focusAgain) {
         if (!TimerAlarms.canSchedule(this)) {
             Toast.makeText(this, "Allow precise alarms so your timer can ring on time.", Toast.LENGTH_LONG).show();
             if (Build.VERSION.SDK_INT >= 31) startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                     Uri.parse("package:" + getPackageName())));
             return;
         }
-        TimerAlarms.cancel(this);
-        TimerState previous = TimerStore.load(this);
-        state.start(SystemClock.elapsedRealtime(), UUID.randomUUID().toString());
         try {
-            TimerStore.save(this, state);
-            TimerAlarms.schedule(this, state);
+            TimerController.start(this, focusAgain, null);
         } catch (SecurityException error) {
-            state = previous;
-            TimerStore.save(this, state);
             Toast.makeText(this, "Please allow precise alarms, then try Start again.", Toast.LENGTH_LONG).show();
         }
+        state = TimerStore.load(this);
         render();
     }
 
@@ -173,33 +216,57 @@ public final class MainActivity extends Activity {
         super.onRequestPermissionsResult(code, permissions, results);
         if (code == 10 && startAfterPermission) {
             startAfterPermission = false;
-            startCountdown();
+            startCountdown(pendingFocusAgain);
         }
     }
 
     private void finishIfDue() {
-        // The receiver and activity run on the main thread. Reload to deliver one completion only.
-        TimerState latest = TimerStore.load(this);
-        if (latest.complete(SystemClock.elapsedRealtime(), latest.token)) {
-            TimerStore.save(this, latest);
-            TimerAlarms.signalFinished(this);
-            dial.announceForAccessibility("Time's up");
+        boolean wasRunning = state.running;
+        state = TimerController.finishIfDue(this);
+        if (wasRunning && state.finished) {
+            dial.announceForAccessibility(getString(state.phase == TimerState.Phase.BREAK
+                    ? R.string.break_complete : R.string.focus_complete));
         }
-        state = latest;
     }
 
     private void render() {
         long remaining = state.remaining(SystemClock.elapsedRealtime());
-        dial.update(remaining, state.duration, state.running, state.finished);
-        String label = state.running ? "Pause" : state.finished ? "Start again" : remaining < state.duration ? "Resume" : "Start";
+        boolean breakPhase = state.phase == TimerState.Phase.BREAK;
+        dial.update(remaining, state);
+        String label = state.running ? getString(R.string.pause_timer) : state.finished
+                ? (breakPhase ? getString(R.string.start_focus, state.focusDuration / TimerState.MINUTE) : getString(R.string.start_break))
+                : remaining < state.duration ? getString(R.string.resume_timer) : getString(R.string.start_timer);
         if (!label.contentEquals(start.getText())) start.setText(label);
-        instruction.setText(state.finished ? "Time's up. Take a breath." : state.running ? "Your time is yours." :
-                remaining < state.duration ? "Paused. Continue whenever you're ready." : "Turn the dial to set your minutes");
+        secondary.setText(breakPhase ? R.string.end_break : state.finished ? R.string.focus_again : R.string.reset_timer);
+        int hint = state.finished ? (breakPhase ? R.string.break_complete_hint : R.string.focus_complete_hint)
+                : state.running ? (breakPhase ? R.string.break_running_hint : R.string.focus_running_hint)
+                : remaining < state.duration ? R.string.paused_hint : R.string.focus_ready_hint;
+        if (!getString(hint).contentEquals(instruction.getText())) instruction.setText(hint);
+        updateBackground(breakPhase);
         boolean enabled = TimerAlarms.alertsEnabled(this);
         alerts.setVisibility(enabled ? View.GONE : View.VISIBLE);
         alerts.setText(R.string.allow_alerts);
         if (state.running) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    private void updateBackground(boolean breakPhase) {
+        if (displayedBreak != null && displayedBreak == breakPhase) return;
+        if (backgroundFade != null) backgroundFade.cancel();
+        int target = breakPhase ? 0xFF183744 : 0xFF192522;
+        if (displayedBreak == null || !ValueAnimator.areAnimatorsEnabled()) {
+            displayedBackground = target;
+            root.setBackgroundColor(target);
+        } else {
+            backgroundFade = ValueAnimator.ofArgb(displayedBackground, target);
+            backgroundFade.setDuration(220);
+            backgroundFade.addUpdateListener(animation -> {
+                displayedBackground = (int) animation.getAnimatedValue();
+                root.setBackgroundColor(displayedBackground);
+            });
+            backgroundFade.start();
+        }
+        displayedBreak = breakPhase;
     }
 
     private void openNotificationSettings() {
@@ -210,6 +277,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         visible = true;
+        preferences.registerOnSharedPreferenceChangeListener(stateChanged);
         state = TimerStore.load(this);
         if (state.running && state.remaining(SystemClock.elapsedRealtime()) > 0 && TimerAlarms.canSchedule(this)) {
             try {
@@ -223,8 +291,20 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         visible = false;
+        preferences.unregisterOnSharedPreferenceChangeListener(stateChanged);
         handler.removeCallbacks(ticker);
         super.onPause();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean("startAfterPermission", startAfterPermission);
+        outState.putBoolean("pendingFocusAgain", pendingFocusAgain);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override protected void onDestroy() {
+        if (backgroundFade != null) backgroundFade.cancel();
+        super.onDestroy();
     }
 
     private TextView text(String value, int size, int color) {
@@ -242,7 +322,7 @@ public final class MainActivity extends Activity {
         button.setTextSize(17);
         button.setAllCaps(false);
         button.setMinWidth(0);
-        button.setMinHeight(dp(48));
+        button.setMinHeight(dp(58));
         button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         button.setTextColor(primary ? 0xFF202E27 : 0xFFE8EBDD);
         GradientDrawable background = new GradientDrawable();
