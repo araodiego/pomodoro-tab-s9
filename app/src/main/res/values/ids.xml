@@ -1,0 +1,6 @@
+<resources>
+    <item name="timer_dial" type="id" />
+    <item name="start_pause" type="id" />
+    <item name="reset_timer" type="id" />
+    <string name="allow_alerts">Allow notifications for alerts with the screen off</string>
+</resources>
