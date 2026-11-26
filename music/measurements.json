@@ -1,0 +1,77 @@
+{
+  "A-control": {
+    "static_gain_db": 0.7399999999999984,
+    "integrated_lufs": "-20.00",
+    "true_peak_dbtp": "-6.77",
+    "pulse_16hz_db_above_local_median": {
+      "80": [
+        3.22,
+        -6.08
+      ],
+      "650": [
+        -3.28,
+        -14.41
+      ],
+      "1250": [
+        2.19,
+        -2.2
+      ]
+    }
+  },
+  "B-full-mix": {
+    "static_gain_db": 2.3200000000000003,
+    "integrated_lufs": "-20.00",
+    "true_peak_dbtp": "-5.55",
+    "pulse_16hz_db_above_local_median": {
+      "80": [
+        27.0,
+        28.54
+      ],
+      "650": [
+        26.55,
+        28.95
+      ],
+      "1250": [
+        26.05,
+        27.4
+      ]
+    }
+  },
+  "C-pad-only": {
+    "static_gain_db": 1.1499999999999986,
+    "integrated_lufs": "-20.00",
+    "true_peak_dbtp": "-6.60",
+    "pulse_16hz_db_above_local_median": {
+      "80": [
+        16.69,
+        19.19
+      ],
+      "650": [
+        13.46,
+        21.54
+      ],
+      "1250": [
+        19.39,
+        24.63
+      ]
+    }
+  },
+  "app": {
+    "integrated_lufs": "-20.00",
+    "true_peak_dbtp": "-6.60",
+    "pulse_16hz_db_above_local_median": {
+      "80": [
+        16.72,
+        19.11
+      ],
+      "650": [
+        13.58,
+        21.57
+      ],
+      "1250": [
+        19.53,
+        24.82
+      ]
+    }
+  }
+}

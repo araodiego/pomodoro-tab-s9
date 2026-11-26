@@ -20,6 +20,7 @@ final class TimerController {
         TimerStore.save(context, state);
         TimerAlarms.cancelAlarm(context);
         CountdownNotification.refresh(context,state);
+        FocusMusic.sync(context,state);
         return true;
     }
 
@@ -42,6 +43,7 @@ final class TimerController {
             throw error;
         }
         TimerAlarms.dismissAlert(context);
+        FocusMusic.sync(context,next);
         return true;
     }
 

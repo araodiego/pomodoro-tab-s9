@@ -78,6 +78,7 @@ final class TimerAlarms {
     }
 
     static void signalFinished(Context context, TimerState state) {
+        FocusMusic.sync(context,state);
         CountdownNotification.cancel(context);
         if (!alertsEnabled(context)) {
             if (MainActivity.isVisible()) {

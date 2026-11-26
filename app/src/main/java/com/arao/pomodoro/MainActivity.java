@@ -219,6 +219,17 @@ public final class MainActivity extends Activity {
         instruction.setMinHeight(dp(38));
         instruction.setGravity(Gravity.CENTER);
         timerPanel.addView(instruction);
+        Button music = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        music.setAllCaps(false);
+        music.setTextColor(0xFFCFDED3);
+        music.setTextSize(14);
+        music.setMinHeight(dp(48));
+        music.setText(FocusMusic.enabled(this) ? "Focus music · Still Current" : "Focus music · Off");
+        music.setOnClickListener(v -> {
+            FocusMusic.toggle(this);
+            music.setText(FocusMusic.enabled(this) ? "Focus music · Still Current" : "Focus music · Off");
+        });
+        timerPanel.addView(music);
 
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
@@ -413,6 +424,7 @@ public final class MainActivity extends Activity {
         TimerAlarms.cancel(this);
         state.reset();
         TimerStore.save(this, state);
+        FocusMusic.sync(this,state);
         render();
     }
 
@@ -556,6 +568,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         visible = true;
+        FocusMusic.sync(this,TimerStore.load(this));
         MeetingAlarms.refresh(this);
         lastRibbonMinute = Long.MIN_VALUE;
         preferences.registerOnSharedPreferenceChangeListener(stateChanged);
