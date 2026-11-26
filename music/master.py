@@ -24,6 +24,7 @@ def main():
         ff('-loglevel','error','-i',n+'-raw.wav','-af',f'volume={gain:.3f}dB','-c:a','pcm_s24le',n+'.wav')
         report[n]={'static_gain_db':gain}
     ff('-loglevel','error','-i','C-pad-only.wav','-c:a','aac','-b:a','256k','-movflags','+faststart','-metadata','title=Still Current','Still-Current.m4a')
+    ff('-loglevel','error','-i','B-full-mix.wav','-c:a','aac','-b:a','256k','-movflags','+faststart','-metadata','title=Still Current - Full Mix','still_current_full.m4a')
     for n in ('A-control','C-pad-only'):
         ff('-loglevel','error','-ss',32,'-i',n+'.wav','-t',120,'-af','afade=t=in:d=1,afade=t=out:st=117:d=3','-c:a','flac',n+'-preview.flac')
     for n,path in [(n,n+'.wav') for n in names]+[('app','Still-Current.m4a')]:

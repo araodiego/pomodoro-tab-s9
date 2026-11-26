@@ -39,6 +39,7 @@ public final class MainActivity extends Activity {
     private LinearLayout root;
     private TimerDialView dial;
     private Button start;
+    private Button music;
     private Button secondary;
     private TextView instruction;
     private TextView alerts;
@@ -219,16 +220,13 @@ public final class MainActivity extends Activity {
         instruction.setMinHeight(dp(38));
         instruction.setGravity(Gravity.CENTER);
         timerPanel.addView(instruction);
-        Button music = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        music = new Button(this, null, android.R.attr.borderlessButtonStyle);
         music.setAllCaps(false);
         music.setTextColor(0xFFCFDED3);
         music.setTextSize(14);
         music.setMinHeight(dp(48));
-        music.setText(FocusMusic.enabled(this) ? "Focus music · Still Current" : "Focus music · Off");
-        music.setOnClickListener(v -> {
-            FocusMusic.toggle(this);
-            music.setText(FocusMusic.enabled(this) ? "Focus music · Still Current" : "Focus music · Off");
-        });
+        updateMusicLabel();
+        music.setOnClickListener(v -> chooseFocusMusic());
         timerPanel.addView(music);
 
         LinearLayout controls = new LinearLayout(this);
@@ -560,6 +558,25 @@ public final class MainActivity extends Activity {
         displayedBreak = breakPhase;
     }
 
+    private void updateMusicLabel() {
+        music.setText(getString(R.string.focus_music_selection, getString(FocusMusic.selection(this).label)));
+    }
+
+    private void chooseFocusMusic() {
+        FocusMusic.Mix[] mixes = FocusMusic.Mix.values();
+        String[] labels = new String[mixes.length];
+        for (int i = 0; i < mixes.length; i++) labels[i] = getString(mixes[i].label);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.focus_music_title)
+                .setSingleChoiceItems(labels, FocusMusic.selection(this).ordinal(), (dialog, index) -> {
+                    FocusMusic.select(this, mixes[index]);
+                    updateMusicLabel();
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
     private void openNotificationSettings() {
         startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
@@ -567,6 +584,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        updateMusicLabel();
         visible = true;
         FocusMusic.sync(this,TimerStore.load(this));
         MeetingAlarms.refresh(this);

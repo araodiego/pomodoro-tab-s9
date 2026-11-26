@@ -12,27 +12,50 @@ import java.io.IOException;
 public final class FocusMusic extends Service {
     private static final String CHANNEL = "focus_soundtrack";
     private static final String ENABLED = "stillCurrent";
+    private static final String MIX_KEY = "stillCurrentMix";
+    enum Mix {
+        OFF("off", R.string.music_off, 0),
+        PAD("pad", R.string.music_pad, R.raw.still_current),
+        FULL("full", R.string.music_full, R.raw.still_current_full);
+
+        final String key;
+        final int label, recording;
+
+        Mix(String key, int label, int recording) {
+            this.key = key;
+            this.label = label;
+            this.recording = recording;
+        }
+    }
     private static final AudioAttributes MUSIC = new AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private AudioManager audio;
     private AudioFocusRequest request;
     private MediaPlayer player, fading;
+    private Mix playingMix;
+    private float currentVolume, outgoingVolume;
     private long shifted = -1, fadeStart;
     private boolean hasFocus;
     private String token = "";
 
-    static boolean enabled(Context c) {
-        return c.getSharedPreferences("work", MODE_PRIVATE).getBoolean(ENABLED,false);
+    static Mix selection(Context c) {
+        SharedPreferences prefs = c.getSharedPreferences("work", MODE_PRIVATE);
+        String key = prefs.getString(MIX_KEY, null);
+        if (key == null) return prefs.getBoolean(ENABLED, false) ? Mix.PAD : Mix.OFF;
+        for (Mix mix : Mix.values()) {
+            if (mix.key.equals(key)) return mix;
+        }
+        return Mix.OFF;
     }
-    static void toggle(Context c) {
+    static void select(Context c, Mix mix) {
         c.getSharedPreferences("work", MODE_PRIVATE).edit()
-                .putBoolean(ENABLED,!enabled(c)).remove("musicInterrupted").apply();
+                .putString(MIX_KEY, mix.key).remove("musicInterrupted").apply();
         sync(c,TimerStore.load(c));
     }
     static void sync(Context c, TimerState s) {
         Intent service = new Intent(c,FocusMusic.class);
-        if (!enabled(c) || !s.running || s.phase != TimerState.Phase.FOCUS ||
+        if (selection(c) == Mix.OFF || !s.running || s.phase != TimerState.Phase.FOCUS ||
                 s.token.equals(c.getSharedPreferences("work",MODE_PRIVATE).getString("musicInterrupted","--"))) {
             c.stopService(service);
             return;
@@ -45,6 +68,8 @@ public final class FocusMusic extends Service {
         if (fading!=null) fading.release();
         player=null;
         fading=null;
+        playingMix=null;
+        currentVolume=0;
         shifted=-1;
     }
     private void focusChanged(int change) {
@@ -82,10 +107,10 @@ public final class FocusMusic extends Service {
         PendingIntent open=PendingIntent.getActivity(this,44,new Intent(this,MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_IMMUTABLE);
         startForeground(44,new Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_timer)
-                .setContentTitle("Still Current").setContentText("Focus music").setOngoing(true)
+                .setContentTitle("Still Current").setContentText(getText(selection(this).label)).setOngoing(true)
                 .setContentIntent(open).setOnlyAlertOnce(true).build());
         TimerState s=TimerStore.load(this);
-        if (!enabled(this) || !s.running || s.phase!=TimerState.Phase.FOCUS) {
+        if (selection(this) == Mix.OFF || !s.running || s.phase!=TimerState.Phase.FOCUS) {
             stopSelf(); return START_NOT_STICKY;
         }
         if (!token.equals(s.token)) {
@@ -97,9 +122,9 @@ public final class FocusMusic extends Service {
         scheduleTick();
         return START_STICKY;
     }
-    private MediaPlayer openAt(long position) throws IOException {
+    private MediaPlayer openAt(Mix mix, long position) throws IOException {
         MediaPlayer p=new MediaPlayer();
-        try (AssetFileDescriptor fd=getResources().openRawResourceFd(R.raw.still_current)) {
+        try (AssetFileDescriptor fd=getResources().openRawResourceFd(mix.recording)) {
             p.setAudioAttributes(MUSIC);
             p.setWakeMode(this,PowerManager.PARTIAL_WAKE_LOCK);
             p.setDataSource(fd.getFileDescriptor(),fd.getStartOffset(),fd.getLength());
@@ -120,25 +145,30 @@ public final class FocusMusic extends Service {
             TimerState s=TimerStore.load(FocusMusic.this);
             long now=SystemClock.elapsedRealtime();
             long remaining=s.remaining(now);
-            if (!enabled(FocusMusic.this) || !s.running || !token.equals(s.token)
+            Mix selected = selection(FocusMusic.this);
+            if (selected == Mix.OFF || !s.running || !token.equals(s.token)
                     || s.phase!=TimerState.Phase.FOCUS || remaining<=0) { stopSelf(); return; }
             if (hasFocus) {
                 long elapsed=s.duration-remaining;
                 long shift=MusicTimeline.inserted(elapsed,s.duration);
                 try {
-                    if (shift!=shifted || player==null) {
+                    if (shift!=shifted || player==null || selected!=playingMix) {
                         if (fading!=null) fading.release();
                         fading=player;
+                        outgoingVolume=currentVolume;
                         player=null;
-                        player=openAt(Math.max(0,elapsed-shift));
+                        player=openAt(selected,Math.max(0,elapsed-shift));
+                        playingMix=selected;
                         shifted=shift;
                         fadeStart=now;
                     }
                     float mix=Math.min(1f,(now-fadeStart)/1500f);
                     float end=Math.min(1f,remaining/2000f);
-                    player.setVolume(mix*end,mix*end);
+                    currentVolume=mix*end;
+                    player.setVolume(currentVolume,currentVolume);
                     if (fading!=null) {
-                        fading.setVolume(1-mix,1-mix);
+                        float volume=outgoingVolume*(1-mix)*end;
+                        fading.setVolume(volume,volume);
                         if (mix>=1) { fading.release(); fading=null; }
                     }
                 } catch (IOException | RuntimeException e) {

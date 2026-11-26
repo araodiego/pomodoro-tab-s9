@@ -36,4 +36,9 @@
     <string name="phase_break_paused">BREAK · PAUSED</string>
     <string name="phase_focus_complete">FOCUS COMPLETE</string>
     <string name="phase_break_complete">BREAK COMPLETE</string>
+    <string name="focus_music_title">Still Current · Focus music</string>
+    <string name="focus_music_selection">Focus music · %1$s</string>
+    <string name="music_off">Off</string>
+    <string name="music_pad">Pad-only mix</string>
+    <string name="music_full">Full mix</string>
 </resources>
