@@ -6,6 +6,8 @@ import android.widget.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.List;
+import java.util.function.Consumer;
 
 final class MeetingEditor {
     private final Activity activity;
@@ -16,11 +18,13 @@ final class MeetingEditor {
     private final TextView preview;
     private final int[] leadValues = {0,5,10,15};
     private final LocalDate referenceDate;
+    private boolean saving;
     final AlertDialog dialog;
 
-    MeetingEditor(Activity activity,int id,Bundle draft,Runnable saved,Runnable dismissed) {
+    MeetingEditor(Activity activity,MeetingSchedule original,Bundle draft,
+                  Consumer<List<MeetingSchedule>> saved,Runnable dismissed) {
         this.activity = activity;
-        original = MeetingStore.load(activity,id);
+        this.original = original;
         Instant now = Instant.now();
         // Use the date being edited explicitly, including the applicable DST offset.
         referenceDate = draft == null ? now.atZone(MeetingSchedule.SP).toLocalDate()
@@ -65,16 +69,22 @@ final class MeetingEditor {
         ScrollView scroll = new ScrollView(activity);
         scroll.addView(box);
         dialog = new AlertDialog.Builder(activity).setTitle(original.name()).setView(scroll)
-                .setNegativeButton("Cancel",null).setPositiveButton("Save",(d,w) -> {
-                    picker.clearFocus();
-                    MeetingSchedule updated = new MeetingSchedule(id,original.name(),nyMinute(),weekdays.isChecked(),
-                            leadValues[lead.getSelectedItemPosition()],start.isChecked(),enabled.isChecked(),original.revision()+1);
-                    MeetingStore.save(activity,updated);
-                    activity.getSystemService(android.app.NotificationManager.class).cancel(MeetingAlarms.notificationId(id,false));
-                    activity.getSystemService(android.app.NotificationManager.class).cancel(MeetingAlarms.notificationId(id,true));
-                    MeetingAlarms.refresh(activity);
-                    saved.run();
-                }).create();
+                .setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            picker.clearFocus();
+            MeetingSchedule updated = new MeetingSchedule(original.id(), original.name(), nyMinute(),
+                    weekdays.isChecked(), leadValues[lead.getSelectedItemPosition()], start.isChecked(),
+                    enabled.isChecked(), original.revision() + 1);
+            saving = true;
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+            MeetingStore.save(activity, updated, false, meetings -> {
+                dialog.dismiss();
+                saved.accept(meetings);
+            }, () -> {
+                saving = false;
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+            });
+        }));
         dialog.setOnDismissListener(d -> dismissed.run());
     }
     private CheckBox check(LinearLayout box,String label,boolean value) {
@@ -101,6 +111,7 @@ final class MeetingEditor {
         preview.setText(text);
     }
     Bundle draft() {
+        if (saving) return null;
         picker.clearFocus();
         Bundle data = new Bundle();
         data.putInt("id",original.id()); data.putString("date",referenceDate.toString());

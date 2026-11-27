@@ -6,6 +6,7 @@ import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.SystemClock;
 import java.time.*;
+import java.util.List;
 
 final class MeetingAlarms {
     static final String ADVANCE = "meeting_advance_v1", START = "meeting_start_v1";
@@ -30,16 +31,15 @@ final class MeetingAlarms {
                 && manager.getNotificationChannel(START) != null
                 && manager.getNotificationChannel(START).getImportance() != NotificationManager.IMPORTANCE_NONE;
     }
-    private static Intent event(Context c, MeetingSchedule m, boolean start, long occurrence) {
+    private static Intent event(Context c, int id, boolean start) {
         return new Intent(c, MeetingAlarmReceiver.class)
-                .setData(Uri.parse("pomodoro://meeting/" + m.id() + "/" + start))
-                .putExtra("id", m.id()).putExtra("start", start)
-                .putExtra("occurrence", occurrence).putExtra("revision", m.revision());
+                .setData(Uri.parse("pomodoro://meeting/" + id + "/" + start))
+                .putExtra("id", id).putExtra("start", start);
     }
-    static void refresh(Context c) {
+    static void refresh(Context c, List<MeetingSchedule> meetings) {
         channels(c);
         Instant now = Instant.now();
-        for (MeetingSchedule m : MeetingStore.all(c)) {
+        for (MeetingSchedule m : meetings) {
             for (boolean isStart : new boolean[]{false,true}) {
                 // Recover a recently due alarm when opening the app or changing the clock.
                 int lead = isStart ? 0 : m.lead();
@@ -53,18 +53,32 @@ final class MeetingAlarms {
             }
         }
     }
+    static void cancel(Context c, int id) {
+        NotificationManager manager = c.getSystemService(NotificationManager.class);
+        for (boolean start : new boolean[]{false, true}) {
+            cancelAlarm(c, id, start);
+            manager.cancel(notificationTag(id), notificationId(id, start));
+        }
+    }
+    private static void cancelAlarm(Context c, int id, boolean start) {
+        PendingIntent pending = PendingIntent.getBroadcast(c, 0, event(c, id, start),
+                PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+        if (pending != null) {
+            c.getSystemService(AlarmManager.class).cancel(pending);
+            pending.cancel();
+        }
+    }
     static void schedule(Context c, MeetingSchedule m, boolean start, Instant now) {
         AlarmManager manager = c.getSystemService(AlarmManager.class);
-        PendingIntent cancel = PendingIntent.getBroadcast(c, 0, event(c,m,start,0),
-                PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
-        if (cancel != null) { manager.cancel(cancel); cancel.cancel(); }
+        cancelAlarm(c, m.id(), start);
         int lead = start ? 0 : m.lead();
         if (!m.enabled() || !m.configured() || (start ? !m.startAlert() : lead == 0)
                 || !TimerAlarms.canSchedule(c)) return;
         Instant trigger = m.next(now, lead);
         if (trigger == null) return;
         PendingIntent fire = PendingIntent.getBroadcast(c, 0,
-                event(c,m,start,trigger.plusSeconds(lead*60L).toEpochMilli()),
+                event(c,m.id(),start).putExtra("revision", m.revision())
+                        .putExtra("occurrence", trigger.plusSeconds(lead*60L).toEpochMilli()),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent show = PendingIntent.getActivity(c, 20, new Intent(c,MainActivity.class),
                 PendingIntent.FLAG_IMMUTABLE);
@@ -91,12 +105,16 @@ final class MeetingAlarms {
                     action(c,m,occurrence,"",false)).build());
         }
         NotificationManager manager = c.getSystemService(NotificationManager.class);
-        if (start) manager.cancel(notificationId(m.id(),false));
+        String tag = notificationTag(m.id());
+        if (start) manager.cancel(tag, notificationId(m.id(), false));
         if (android.os.Build.VERSION.SDK_INT < 33 || c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED)
-            manager.notify(notificationId(m.id(),start),builder.build());
+            manager.notify(tag, notificationId(m.id(), start), builder.build());
     }
-    static int notificationId(int id, boolean start) { return 40 + id*2 + (start ? 1 : 0); }
+    private static String notificationTag(int id) { return id < 2 ? null : "meeting:" + id; }
+    private static int notificationId(int id, boolean start) {
+        return (id < 2 ? 40 + id * 2 : 0) + (start ? 1 : 0);
+    }
     private static PendingIntent action(Context c, MeetingSchedule m, long occurrence, String token, boolean pause) {
         Intent intent = new Intent(c,MeetingActionReceiver.class)
                 .setData(Uri.parse("pomodoro://meeting-action/" + m.id() + "/" + occurrence + "/" + m.revision() + "/" + pause))
@@ -107,6 +125,6 @@ final class MeetingAlarms {
     static void acknowledge(Context c, MeetingSchedule m, long occurrence) {
         if (MeetingStore.pending(c,m) != occurrence) return;
         MeetingStore.acknowledge(c,m.id(),occurrence);
-        c.getSystemService(NotificationManager.class).cancel(notificationId(m.id(),true));
+        c.getSystemService(NotificationManager.class).cancel(notificationTag(m.id()), notificationId(m.id(), true));
     }
 }

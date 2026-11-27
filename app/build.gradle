@@ -8,8 +8,13 @@ android {
         applicationId 'com.arao.pomodoro.work'
         minSdk 26
         targetSdk 36
-        versionCode 8
-        versionName '0.8.0-work'
+        versionCode 9
+        versionName '0.9.0-work'
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += ["room.schemaLocation": "$projectDir/schemas".toString()]
+            }
+        }
     }
 
     signingConfigs {
@@ -25,4 +30,9 @@ android {
     }
 
     lint { abortOnError true }
+}
+
+dependencies {
+    implementation 'androidx.room:room-runtime:2.8.4'
+    annotationProcessor 'androidx.room:room-compiler:2.8.4'
 }

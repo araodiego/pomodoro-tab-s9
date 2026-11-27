@@ -20,13 +20,17 @@ final class MeetingPlanner {
         return days;
     }
     static Occurrence next(List<MeetingSchedule> meetings, Instant now) {
-        Occurrence next = null;
+        List<Occurrence> upcoming = upcoming(meetings, now);
+        return upcoming.isEmpty() ? null : upcoming.get(0);
+    }
+    static List<Occurrence> upcoming(List<MeetingSchedule> meetings, Instant now) {
+        List<Occurrence> upcoming = new ArrayList<>();
         for (MeetingSchedule meeting : meetings) {
             Instant start = meeting.next(now, 0);
-            if (start != null && (next == null || start.isBefore(next.start())))
-                next = new Occurrence(meeting, start);
+            if (start != null) upcoming.add(new Occurrence(meeting, start));
         }
-        return next;
+        upcoming.sort(Comparator.comparing(Occurrence::start));
+        return upcoming;
     }
     static String until(Instant now, Instant start) {
         long mins = (Math.max(0, Duration.between(now, start).getSeconds()) + 59) / 60;
@@ -36,7 +40,7 @@ final class MeetingPlanner {
     static boolean validReminder(MeetingSchedule m, boolean start, long occurrence, Instant now) {
         if (!m.configured() || !m.enabled() || (start ? !m.startAlert() : m.lead() == 0)) return false;
         Instant when = Instant.ofEpochMilli(occurrence);
-        LocalDate day = when.atZone(MeetingSchedule.NY).toLocalDate();
+        LocalDate day = when.atZone(m.zone()).toLocalDate();
         if (!m.occurs(day) || !m.start(day).equals(when)) return false;
         long late = Duration.between(when.minusSeconds(start ? 0 : m.lead()*60L), now).toMillis();
         return late >= 0 && late < 60000;

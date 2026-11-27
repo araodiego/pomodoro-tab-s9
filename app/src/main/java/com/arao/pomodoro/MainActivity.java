@@ -54,11 +54,13 @@ public final class MainActivity extends Activity {
     private MeetingRibbonView expandedRibbon;
     private AlertDialog ribbonDialog;
     private MeetingEditor meetingEditor;
+    private ExtraMeetingEditor extraMeetingEditor;
+    private Bundle restoredMeetingDraft;
     private AlertDialog meetingPrompt;
     private int promptId = -1;
     private long promptOccurrence;
     private long lastRibbonMinute = Long.MIN_VALUE;
-    private List<MeetingSchedule> meetings;
+    private List<MeetingSchedule> meetings = java.util.Collections.emptyList();
     private SharedPreferences workPreferences;
     private boolean startAfterPermission;
     private boolean pendingFocusAgain;
@@ -95,8 +97,7 @@ public final class MainActivity extends Activity {
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         buildScreen();
         if (savedInstanceState != null && savedInstanceState.containsKey("meetingDraft")) {
-            Bundle draft = savedInstanceState.getBundle("meetingDraft");
-            root.post(() -> editMeeting(draft.getInt("id"), draft));
+            restoredMeetingDraft = savedInstanceState.getBundle("meetingDraft");
         }
         if (savedInstanceState != null && savedInstanceState.containsKey("jiraDraft")) {
             String draft = savedInstanceState.getString("jiraDraft");
@@ -299,6 +300,7 @@ public final class MainActivity extends Activity {
     private MeetingRibbonView.Actions ribbonActions() {
         return new MeetingRibbonView.Actions() {
             @Override public void edit(int id) { editMeeting(id,null); }
+            @Override public void add() { editMeeting(-1, null); }
             @Override public void expand() { showRibbon(); }
             @Override public void settings() { requestMeetingAlerts(); }
             @Override public void close() { setRibbonVisible(false); }
@@ -312,7 +314,7 @@ public final class MainActivity extends Activity {
         handler.removeCallbacks(dismissUndo);
         undoBar.setVisibility(View.GONE);
         if (show) {
-            ribbon.render(Instant.now(),MeetingStore.all(this));
+            ribbon.render(Instant.now(),meetings);
         } else {
             overflow.requestFocus();
             if (!workPreferences.getBoolean("myDayUndoShown",false)) {
@@ -326,7 +328,7 @@ public final class MainActivity extends Activity {
 
     private void showRibbon() {
         expandedRibbon = new MeetingRibbonView(this,false,ribbonActions());
-        expandedRibbon.render(Instant.now(),MeetingStore.all(this));
+        expandedRibbon.render(Instant.now(),meetings);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(expandedRibbon);
         ribbonDialog = new AlertDialog.Builder(this).setView(scroll).setPositiveButton("Done",null).create();
@@ -335,15 +337,33 @@ public final class MainActivity extends Activity {
     }
 
     private void editMeeting(int id, Bundle draft) {
-        if (meetingEditor != null) return;
-        meetingEditor = new MeetingEditor(this,id,draft,() -> {
-            lastRibbonMinute = Long.MIN_VALUE;
-            updateMeetings();
-            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED)
-                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},11);
-        }, () -> meetingEditor = null);
-        meetingEditor.dialog.show();
+        if (meetingEditor != null || extraMeetingEditor != null) return;
+        MeetingSchedule original = MeetingStore.find(meetings, id);
+        if (id >= 0 && original == null) return;
+        if (original != null && original.preset()) {
+            meetingEditor = new MeetingEditor(this, original, draft, this::meetingsSaved,
+                    () -> meetingEditor = null);
+            meetingEditor.dialog.show();
+        } else {
+            extraMeetingEditor = new ExtraMeetingEditor(this, original, draft, this::meetingsSaved,
+                    () -> extraMeetingEditor = null);
+            extraMeetingEditor.dialog.show();
+        }
+    }
+
+    private void setMeetings(List<MeetingSchedule> schedules) {
+        meetings = schedules;
+        lastRibbonMinute = Long.MIN_VALUE;
+        if (visible && !isDestroyed()) updateMeetings();
+    }
+
+    private void meetingsSaved(List<MeetingSchedule> schedules) {
+        if (isDestroyed()) return;
+        setMeetings(schedules);
+        if (Build.VERSION.SDK_INT >= 33 && visible
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && schedules.stream().anyMatch(m -> m.configured() && m.enabled() && (m.startAlert() || m.lead() > 0)))
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 11);
     }
 
     private void requestMeetingAlerts() {
@@ -362,17 +382,15 @@ public final class MainActivity extends Activity {
         long minute = now.getEpochSecond()/60;
         if (minute != lastRibbonMinute) {
             lastRibbonMinute = minute;
-            meetings = MeetingStore.all(this);
-            if (!TimerAlarms.canSchedule(this)) MeetingAlarms.refresh(this);
             if (ribbonScroll.getVisibility() == View.VISIBLE) ribbon.render(now,meetings);
             if (expandedRibbon != null) expandedRibbon.render(now,meetings);
         }
         if (meetingPrompt != null) {
-            if (MeetingStore.pending(this,MeetingStore.load(this,promptId)) != promptOccurrence)
+            if (MeetingStore.pending(this,MeetingStore.find(meetings,promptId)) != promptOccurrence)
                 meetingPrompt.dismiss();
             return;
         }
-        if (meetingEditor != null || jiraEditor != null || ribbonDialog != null || !visible) return;
+        if (meetingEditor != null || extraMeetingEditor != null || jiraEditor != null || ribbonDialog != null || !visible) return;
         for (MeetingSchedule meeting : meetings) {
             long occurrence = MeetingStore.pending(this,meeting);
             if (occurrence != 0) {
@@ -587,7 +605,14 @@ public final class MainActivity extends Activity {
         updateMusicLabel();
         visible = true;
         FocusMusic.sync(this,TimerStore.load(this));
-        MeetingAlarms.refresh(this);
+        MeetingStore.read(this, schedules -> {
+            if (!visible || isDestroyed()) return;
+            MeetingAlarms.refresh(this, schedules);
+            setMeetings(schedules);
+            Bundle draft = restoredMeetingDraft;
+            restoredMeetingDraft = null;
+            if (draft != null) editMeeting(draft.getInt("id"), draft);
+        }, () -> {});
         lastRibbonMinute = Long.MIN_VALUE;
         preferences.registerOnSharedPreferenceChangeListener(stateChanged);
         state = TimerStore.load(this);
@@ -613,6 +638,8 @@ public final class MainActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle outState) {
         if (jiraEditor != null) outState.putString("jiraDraft", jiraEditor.getText().toString());
         if (meetingEditor != null) outState.putBundle("meetingDraft",meetingEditor.draft());
+        if (extraMeetingEditor != null) outState.putBundle("meetingDraft",extraMeetingEditor.draft());
+        if (restoredMeetingDraft != null) outState.putBundle("meetingDraft", restoredMeetingDraft);
         outState.putBoolean("startAfterPermission", startAfterPermission);
         outState.putBoolean("pendingFocusAgain", pendingFocusAgain);
         super.onSaveInstanceState(outState);

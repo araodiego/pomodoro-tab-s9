@@ -15,7 +15,7 @@ import java.util.*;
 
 @android.annotation.SuppressLint("ViewConstructor") // Created only in code with required actions.
 final class MeetingRibbonView extends LinearLayout {
-    interface Actions { void edit(int id); void expand(); void settings(); void close(); }
+    interface Actions { void edit(int id); void add(); void expand(); void settings(); void close(); }
     private final Actions actions;
     private final boolean compact;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -82,27 +82,28 @@ final class MeetingRibbonView extends LinearLayout {
                 previous = event.start();
             }
             if (!nowShown && !today.isEmpty()) addRow("Now  ·  " + MeetingSchedule.brazilTime(now),"",INK,-1,gap(previous,now));
-            if (today.isEmpty() || (next != null && !next.start().atZone(MeetingSchedule.SP).toLocalDate()
-                    .equals(now.atZone(MeetingSchedule.SP).toLocalDate()))) {
-                if (next != null) {
-                    String date = DateTimeFormatter.ofPattern("EEE, MMM d",Locale.US).format(next.start().atZone(MeetingSchedule.SP));
-                    addRow(next.meeting().name(),"Next · " + date,AMBER,next.meeting().id(),dp(8),
-                            MeetingSchedule.brazilTime(next.start()));
+            LocalDate localDate = now.atZone(MeetingSchedule.SP).toLocalDate();
+            DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US);
+            List<MeetingPlanner.Occurrence> upcoming = MeetingPlanner.upcoming(schedules,
+                    localDate.plusDays(1).atStartOfDay(MeetingSchedule.SP).toInstant().minusNanos(1)).stream()
+                    .filter(o -> o.start().atZone(MeetingSchedule.SP).toLocalDate().isAfter(localDate))
+                    .collect(java.util.stream.Collectors.toList());
+            if (!upcoming.isEmpty()) {
+                TextView heading = label("Upcoming", 14, MUTED, true);
+                heading.setPadding(0, dp(14), 0, 0);
+                addView(heading);
+                for (MeetingPlanner.Occurrence event : upcoming) {
+                    addRow(event.meeting().name(), dateFormat.format(event.start().atZone(MeetingSchedule.SP)),
+                            AMBER, event.meeting().id(), dp(6), MeetingSchedule.brazilTime(event.start()));
                 }
             }
             for (MeetingSchedule meeting : schedules) {
                 boolean visible = today.stream().anyMatch(o -> o.meeting().id() == meeting.id())
-                        || (next != null && next.meeting().id() == meeting.id());
+                        || upcoming.stream().anyMatch(o -> o.meeting().id() == meeting.id());
                 if (!visible) {
-                    Instant future = meeting.next(now,0);
                     String status = !meeting.configured() ? "" : !meeting.enabled() ? "Reminders off"
-                            : DateTimeFormatter.ofPattern("EEE, MMM d",Locale.US).format(future.atZone(MeetingSchedule.SP));
-                    String name = meeting.name();
-                    if (meeting.configured()) {
-                        Instant display = future != null ? future : meeting.start(now.atZone(MeetingSchedule.NY).toLocalDate());
-                        name = MeetingSchedule.brazilTime(display) + "  " + name;
-                    }
-                    addScheduleTile(meeting,name,status);
+                            : "Past meeting · " + dateFormat.format(meeting.start(meeting.date()).atZone(MeetingSchedule.SP));
+                    addScheduleTile(meeting,meeting.name(),status);
                 }
             }
         }
@@ -125,6 +126,14 @@ final class MeetingRibbonView extends LinearLayout {
         titles.addView(label("My Day",22,INK,true));
         titles.addView(label("São Paulo  ·  " + MeetingSchedule.brazilTime(now),13,0xFF56675E,false));
         header.addView(titles,new LayoutParams(0,-2,1));
+        TextView add = label("+ Add meeting", 14, 0xFF29503E, true);
+        add.setPadding(dp(8), 0, dp(8), 0);
+        add.setGravity(Gravity.CENTER);
+        add.setMinHeight(dp(48));
+        add.setContentDescription("Add meeting");
+        add.setFocusable(true);
+        add.setOnClickListener(view -> actions.add());
+        header.addView(add,new LayoutParams(-2,dp(48)));
         TextView close = label("×",24,INK,false);
         close.setGravity(Gravity.CENTER);
         close.setContentDescription("Hide My Day");

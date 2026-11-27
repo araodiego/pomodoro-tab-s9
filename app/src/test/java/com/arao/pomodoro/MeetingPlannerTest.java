@@ -44,6 +44,21 @@ public final class MeetingPlannerTest {
         check(!MeetingPlanner.validReminder(schedule(601,true,5,true),true,occurrence,instant("2026-11-25T15:00:00Z")),"edited rejected");
         check(!MeetingPlanner.validReminder(schedule(600,true,0,true),false,occurrence,instant("2026-11-25T14:55:00Z")),"advance disabled");
         check(!MeetingPlanner.validReminder(schedule(600,true,5,false),true,occurrence,instant("2026-11-25T15:00:00Z")),"meeting disabled");
+        LocalDate later = LocalDate.parse("2026-12-15");
+        MeetingSchedule oneOff = new MeetingSchedule(2, "Review", 30, false, 5, true, true, 1,
+                "review", MeetingSchedule.SP, later, 0);
+        Instant start = instant("2026-12-15T03:30:00Z");
+        check(oneOff.next(now, 0).equals(start), "one-time meeting several weeks away");
+        check(oneOff.next(start, 0) == null, "one-time meeting never repeats");
+        check(MeetingPlanner.validReminder(oneOff, false, start.toEpochMilli(), start.minusSeconds(300)),
+                "start and reminder use the meeting's time zone");
+        check(MeetingPlanner.today(List.of(oneOff), start).size() == 1, "one-time meeting on My Day");
+        MeetingSchedule weekly = new MeetingSchedule(3, "Weekly", 840, false, 5, true, true, 1,
+                "weekly", MeetingSchedule.NY, LocalDate.parse("2027-03-08"), 1);
+        check(weekly.next(instant("2027-03-08T18:00:00Z"), 0).equals(instant("2027-03-08T19:00:00Z")),
+                "weekly meeting before US daylight saving time");
+        check(weekly.next(instant("2027-03-08T19:00:00Z"), 0).equals(instant("2027-03-15T18:00:00Z")),
+                "weekly meeting keeps its New York local time after DST");
         System.out.println("Meeting schedule checks passed: "+checks);
     }
 }
